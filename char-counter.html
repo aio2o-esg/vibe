@@ -7,44 +7,192 @@
   <style>
     body {
       font-family: "Malgun Gothic", sans-serif;
-      max-width: 640px;
-      margin: 40px auto;
-      padding: 0 16px;
+      max-width: 680px;
+      margin: 0 auto;
+      padding: 80px 16px 40px;
+      color: #222;
     }
-    textarea {
-      width: 100%;
-      height: 160px;
-      padding: 8px;
-      font-size: 16px;
+    html {
+      min-height: 100%;
+      border-top: 5px solid #03c75a;
+      background: #f2f3f5 linear-gradient(#ffffff, #f2f3f5 320px) no-repeat;
       box-sizing: border-box;
     }
+    h1 {
+      margin: 0 0 28px;
+      text-align: center;
+      font-size: 44px;
+      font-weight: 800;
+      letter-spacing: -2px;
+      color: #03c75a;
+    }
+    .search-box {
+      border: 2px solid #03c75a;
+      border-radius: 14px;
+      box-shadow: 0 2px 10px rgba(3, 199, 90, 0.15);
+      background: #fff;
+      overflow: hidden;
+    }
+    textarea {
+      display: block;
+      width: 100%;
+      height: 160px;
+      padding: 18px 20px;
+      border: none;
+      outline: none;
+      resize: vertical;
+      font-family: inherit;
+      font-size: 18px;
+      line-height: 1.5;
+      box-sizing: border-box;
+    }
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 10px 12px 10px 20px;
+      border-top: 1px solid #e5e5e5;
+      background: #fafafa;
+    }
+    .limit {
+      font-size: 15px;
+      color: #555;
+    }
+    .limit input {
+      width: 90px;
+      margin-left: 6px;
+      padding: 6px 8px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 15px;
+    }
+    .limit input:focus {
+      border-color: #03c75a;
+      outline: none;
+    }
+    .buttons {
+      display: flex;
+      gap: 6px;
+    }
     button {
-      margin-top: 8px;
-      padding: 8px 20px;
-      font-size: 16px;
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-family: inherit;
+      font-size: 15px;
+      font-weight: bold;
       cursor: pointer;
     }
+    #countBtn {
+      border: none;
+      background: #03c75a;
+      color: #fff;
+    }
+    #countBtn:hover {
+      background: #02b351;
+    }
+    #clearBtn {
+      border: 1px solid #ddd;
+      background: #fff;
+      color: #555;
+    }
+    #clearBtn:hover {
+      background: #f2f2f2;
+    }
     #result {
-      margin-top: 16px;
+      margin-top: 20px;
+      text-align: center;
       font-size: 18px;
+    }
+    .over {
+      color: red;
+      font-weight: bold;
     }
   </style>
 </head>
 <body>
   <h1>글자 수 세기</h1>
-  <textarea id="input" placeholder="여기에 글을 입력하세요"></textarea>
-  <button id="countBtn">글자 수 세기</button>
+  <div class="search-box">
+    <textarea id="input" placeholder="여기에 글을 입력하세요"></textarea>
+    <div class="toolbar">
+      <div class="limit">
+        <label for="limit">제한 글자 수:</label>
+        <input type="number" id="limit" min="0" placeholder="예: 500">
+      </div>
+      <div class="buttons">
+        <button id="countBtn">글자 수 세기</button>
+        <button id="clearBtn">전체 지우기</button>
+      </div>
+    </div>
+  </div>
   <p id="result"></p>
 
   <script>
+    var lastValue = "";
+
+    function getLimit() {
+      var limitValue = document.getElementById("limit").value;
+      return limitValue === "" ? Infinity : Number(limitValue);
+    }
+
+    // 제한을 넘으면 방금 입력된 글자 중 넘친 만큼을 커서 앞에서 잘라 낸다.
+    function enforceLimit() {
+      var input = document.getElementById("input");
+      var chars = Array.from(input.value);
+      var allowed = Math.max(getLimit(), Array.from(lastValue).length);
+      var excess = chars.length - allowed;
+      if (excess > 0) {
+        var before = Array.from(input.value.slice(0, input.selectionEnd));
+        var after = input.value.slice(input.selectionEnd);
+        var kept = before.slice(0, Math.max(0, before.length - excess)).join("");
+        input.value = kept + after;
+        input.setSelectionRange(kept.length, kept.length);
+      }
+      lastValue = input.value;
+    }
+
     function showCount() {
       var text = document.getElementById("input").value;
       var count = Array.from(text).length;
-      document.getElementById("result").textContent = "글자 수: " + count + "자";
+      var countNoSpace = Array.from(text.replace(/\s/g, "")).length;
+      var limit = getLimit();
+
+      var result = document.getElementById("result");
+      result.textContent = "";
+      result.append("공백 포함: ", numberSpan(count, limit), "자 / 공백 제외: ", numberSpan(countNoSpace, limit), "자");
+    }
+
+    function numberSpan(value, limit) {
+      var span = document.createElement("span");
+      span.textContent = value;
+      if (value > limit) {
+        span.className = "over";
+      }
+      return span;
     }
 
     document.getElementById("countBtn").addEventListener("click", showCount);
-    document.getElementById("input").addEventListener("input", showCount);
+    document.getElementById("input").addEventListener("input", function (event) {
+      if (!event.isComposing) {
+        enforceLimit();
+      }
+      showCount();
+    });
+    document.getElementById("input").addEventListener("compositionend", function () {
+      enforceLimit();
+      showCount();
+    });
+    document.getElementById("clearBtn").addEventListener("click", function () {
+      document.getElementById("input").value = "";
+      lastValue = "";
+      showCount();
+    });
+    document.getElementById("limit").addEventListener("input", function () {
+      if (document.getElementById("result").textContent !== "") {
+        showCount();
+      }
+    });
   </script>
 </body>
 </html>
