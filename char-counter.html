@@ -28,10 +28,27 @@
       margin-top: 16px;
       font-size: 18px;
     }
+    .limit {
+      margin-bottom: 8px;
+      font-size: 16px;
+    }
+    .limit input {
+      width: 100px;
+      padding: 4px;
+      font-size: 16px;
+    }
+    .over {
+      color: red;
+      font-weight: bold;
+    }
   </style>
 </head>
 <body>
   <h1>글자 수 세기</h1>
+  <div class="limit">
+    <label for="limit">제한 글자 수:</label>
+    <input type="number" id="limit" min="0" placeholder="예: 500">
+  </div>
   <textarea id="input" placeholder="여기에 글을 입력하세요"></textarea>
   <button id="countBtn">글자 수 세기</button>
   <p id="result"></p>
@@ -40,11 +57,31 @@
     function showCount() {
       var text = document.getElementById("input").value;
       var count = Array.from(text).length;
-      document.getElementById("result").textContent = "글자 수: " + count + "자";
+      var countNoSpace = Array.from(text.replace(/\s/g, "")).length;
+      var limitValue = document.getElementById("limit").value;
+      var limit = limitValue === "" ? Infinity : Number(limitValue);
+
+      var result = document.getElementById("result");
+      result.textContent = "";
+      result.append("공백 포함: ", numberSpan(count, limit), "자 / 공백 제외: ", numberSpan(countNoSpace, limit), "자");
+    }
+
+    function numberSpan(value, limit) {
+      var span = document.createElement("span");
+      span.textContent = value;
+      if (value > limit) {
+        span.className = "over";
+      }
+      return span;
     }
 
     document.getElementById("countBtn").addEventListener("click", showCount);
     document.getElementById("input").addEventListener("input", showCount);
+    document.getElementById("limit").addEventListener("input", function () {
+      if (document.getElementById("result").textContent !== "") {
+        showCount();
+      }
+    });
   </script>
 </body>
 </html>
