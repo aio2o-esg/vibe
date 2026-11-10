@@ -12,13 +12,29 @@
     #linkBtn { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); padding: 14px 28px; font: 18px sans-serif; color: #2a1d05; background: #ffcc44; border: 0; border-radius: 28px; cursor: pointer; }
     #linkBtn.on { color: #ffe9a8; background: rgba(40, 32, 10, 0.85); border: 1px solid #ffcc44; }
     #soundBtn { position: fixed; right: 12px; top: 62px; padding: 8px 14px; font: 14px sans-serif; color: #cfd6ff; background: rgba(30, 36, 80, 0.8); border: 1px solid #5560a8; border-radius: 18px; cursor: pointer; }
+    #eyepiece { position: fixed; inset: 0; display: none; pointer-events: none; background: radial-gradient(circle closest-side, transparent 85%, rgba(150, 170, 230, 0.22) 87.5%, rgba(0, 0, 0, 0.9) 91%, #000 100%); }
+    #scopeBtn { position: fixed; left: 50%; bottom: 88px; transform: translateX(-50%); display: none; padding: 10px 22px; font: 16px sans-serif; color: #dfe6ff; background: rgba(30, 36, 80, 0.85); border: 1px solid #7f8fe0; border-radius: 22px; cursor: pointer; white-space: nowrap; }
+    #zoomBox { position: fixed; right: 12px; top: 50%; transform: translateY(-50%); display: none; flex-direction: column; align-items: center; gap: 8px; color: #dfe6ff; font: 15px sans-serif; }
+    #zoomBox button { width: 44px; height: 44px; border-radius: 22px; font: 22px sans-serif; color: #dfe6ff; background: rgba(30, 36, 80, 0.85); border: 1px solid #7f8fe0; cursor: pointer; }
+    #conName { position: fixed; left: 0; top: 0; transform: translate(-50%, -50%); display: none; padding: 6px 14px; font: 18px sans-serif; color: #fff3c4; background: rgba(10, 14, 40, 0.75); border: 1px solid rgba(191, 208, 255, 0.6); border-radius: 16px; pointer-events: none; white-space: nowrap; }
+    body.scope #eyepiece { display: block; }
+    body.scope #zoomBox { display: flex; }
   </style>
 </head>
 <body>
+  <div id="eyepiece"></div>
+  <div id="conName"></div>
   <div id="hint">바닥을 누르거나 WASD · 방향키로 걷기</div>
   <div id="count">오늘 만든 별자리 0개</div>
   <button id="linkBtn" type="button">별자리 잇기</button>
   <button id="soundBtn" type="button">소리 켜기</button>
+  <button id="scopeBtn" type="button">망원경 보기</button>
+  <div id="zoomBox">
+    <button id="zoomIn" type="button" aria-label="확대">+</button>
+    <span id="zoomLabel">×2</span>
+    <button id="zoomOut" type="button" aria-label="축소">−</button>
+  </div>
+  <script src="sky-data.js"></script>
   <script type="module">
     import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
 
@@ -73,61 +89,125 @@
     // 멀리 보이는 다른 오름들: 지평선의 별을 가리는 검은 능선
     const farHillGeo = new THREE.SphereGeometry(1, 32, 12, 0, Math.PI * 2, 0, Math.PI / 2);
     const farHillMat = new THREE.MeshBasicMaterial({ color: 0x03050b, fog: false });
+    const farHills = new THREE.Group();   // 망원경 화면에서 한꺼번에 숨기려고 묶어 둔다
     for (let i = 0; i < 12; i++) {
       const a = (i / 12) * Math.PI * 2 + makeRandom() * 0.3;
       const farHill = new THREE.Mesh(farHillGeo, farHillMat);
       farHill.scale.set(18 + makeRandom() * 14, 14 + makeRandom() * 12, 8);
       farHill.position.set(Math.cos(a) * 84, -HILL_DROP, Math.sin(a) * 84);
       farHill.rotation.y = Math.PI / 2 - a;
-      scene.add(farHill);
+      farHills.add(farHill);
+    }
+    scene.add(farHills);
+
+    // 글씨 무늬: [글자, 색] 조각을 가운데 맞춰 이어 쓴 투명 바탕 그림(코드로 그린다)
+    function makeTextTexture(parts, width, height, font) {
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const g = canvas.getContext('2d');
+      g.font = font;
+      g.textBaseline = 'middle';
+      const total = parts.reduce((w, [text]) => w + g.measureText(text).width, 0);
+      let x = (width - total) / 2;
+      for (const [text, color] of parts) {
+        g.fillStyle = color;
+        g.fillText(text, x, height / 2);
+        x += g.measureText(text).width;
+      }
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.anisotropy = 4;
+      return tex;
     }
 
-    // 망원경: 세발 받침 + 경통 + 보조 망원경 + 접안렌즈, 받침 둘레에 낮은 현무암 테두리
+    // 망원경: VESPERA II처럼 흰 둥근 몸통 옆에 경통이 붙은 스마트 망원경, 짧은 검은 삼발이
     const telescope = new THREE.Group();
-    const metalMat = new THREE.MeshStandardMaterial({ color: 0x9aa3b5, metalness: 0.6, roughness: 0.4 });
-    const darkMat = new THREE.MeshStandardMaterial({ color: 0x22252e, metalness: 0.3, roughness: 0.6 });
-    const tubeMat = new THREE.MeshStandardMaterial({ color: 0xe8ebf2, metalness: 0.2, roughness: 0.35 });
-    const MOUNT_Y = 1.45;
+    const vespera = new THREE.Group();
+    const shellMat = new THREE.MeshStandardMaterial({ color: 0xf2f4f7, metalness: 0.05, roughness: 0.35 });
+    const blackMat = new THREE.MeshStandardMaterial({ color: 0x14161b, metalness: 0.3, roughness: 0.3 });
+    const VESPERA_SIZE = 0.8;   // 망원경 전체 크기
+    const HUB_Y = 0.4;          // 삼발이 위 받침 높이
     const up = new THREE.Vector3(0, 1, 0);
     for (let i = 0; i < 3; i++) {
       const a = (i / 3) * Math.PI * 2 + Math.PI / 6;
-      const top = new THREE.Vector3(0, MOUNT_Y, 0);
-      const foot = new THREE.Vector3(Math.cos(a) * 0.65, 0, Math.sin(a) * 0.65);
+      const top = new THREE.Vector3(0, HUB_Y, 0);
+      const foot = new THREE.Vector3(Math.cos(a) * 0.5, 0, Math.sin(a) * 0.5);
       const dir = top.clone().sub(foot);
-      const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.05, dir.length(), 8), metalMat);
+      const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.04, dir.length(), 8), blackMat);
       leg.position.copy(foot).add(top).multiplyScalar(0.5);
       leg.quaternion.setFromUnitVectors(up, dir.normalize());
-      telescope.add(leg);
+      vespera.add(leg);
     }
-    const mount = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.2, 0.28), darkMat);
-    mount.position.y = MOUNT_Y;
-    telescope.add(mount);
+    const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.14, 0.08, 16), blackMat);
+    hub.position.y = HUB_Y;
+    vespera.add(hub);
 
-    // 경통은 받침 위에서 비스듬히 옆을 향해 하늘 쪽으로 45도 들려 있다
+    // 방위로 도는 부분: 둥근 기둥 몸통, 아래로 휜 발, 파란 링 불빛, 몸통 글씨, 옆에 붙은 경통
+    const scopeTurn = new THREE.Group();
+    const column = new THREE.Mesh(new THREE.CapsuleGeometry(0.26, 1.0, 8, 24), shellMat);
+    column.position.y = HUB_Y + 0.76;
+    column.scale.z = 0.7;
+    scopeTurn.add(column);
+    const bodyFoot = new THREE.Mesh(new THREE.CapsuleGeometry(0.17, 0.24, 8, 16), shellMat);
+    bodyFoot.rotation.z = Math.PI / 2;
+    bodyFoot.position.set(0.2, HUB_Y + 0.22, 0);
+    bodyFoot.scale.z = 0.7;
+    scopeTurn.add(bodyFoot);
+    const ledRing = new THREE.Mesh(
+      new THREE.TorusGeometry(0.075, 0.012, 8, 32),
+      new THREE.MeshBasicMaterial({ color: 0x5cc8ff })
+    );
+    ledRing.position.set(-0.262, HUB_Y + 1.2, 0);
+    ledRing.rotation.y = Math.PI / 2;
+    scopeTurn.add(ledRing);
+    const nameTex = makeTextTexture([['VESPERA II', '#6f7890']], 1024, 172, '600 124px "Segoe UI", "Helvetica Neue", Arial, sans-serif');
+    const nameLabel = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.95, 0.16),
+      new THREE.MeshStandardMaterial({
+        map: nameTex, transparent: true, depthWrite: false,
+        emissive: 0xffffff, emissiveMap: nameTex, emissiveIntensity: 0.3,
+      })
+    );
+    nameLabel.position.set(-0.264, HUB_Y + 0.7, 0);
+    nameLabel.rotation.set(0, -Math.PI / 2, Math.PI / 2);   // 몸통 옆면에 세로로 쓴다
+    scopeTurn.add(nameLabel);
+    const joint = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.1, 20), shellMat);
+    joint.rotation.z = Math.PI / 2;
+    joint.position.set(0.31, HUB_Y + 1.22, 0);
+    scopeTurn.add(joint);
+
+    // 경통: 뒤쪽은 흰 둥근 통, 앞쪽은 검은 통, 끝에 렌즈. 옆 축을 중심으로 고도만큼 들린다
     const tubePivot = new THREE.Group();
-    tubePivot.position.y = MOUNT_Y + 0.15;
-    tubePivot.rotation.order = 'YXZ';
-    tubePivot.rotation.set(-Math.PI / 4, 1.1, 0);
-    const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 1.4, 24), tubeMat);
-    tube.position.y = 0.2;
-    tubePivot.add(tube);
-    const dewShield = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.3, 24, 1, true), darkMat);
-    dewShield.position.y = 0.95;
-    tubePivot.add(dewShield);
+    tubePivot.position.set(0.47, HUB_Y + 1.22, 0);
+    const tubeBack = new THREE.Mesh(new THREE.CapsuleGeometry(0.17, 0.45, 8, 24), shellMat);
+    tubeBack.position.y = -0.1;
+    tubePivot.add(tubeBack);
+    const tubeFront = new THREE.Mesh(new THREE.CylinderGeometry(0.178, 0.178, 0.55, 24), blackMat);
+    tubeFront.position.y = 0.42;
+    tubePivot.add(tubeFront);
     const lens = new THREE.Mesh(
-      new THREE.CircleGeometry(0.15, 24),
-      new THREE.MeshBasicMaterial({ color: 0x7f9cff, transparent: true, opacity: 0.7 })
+      new THREE.CircleGeometry(0.14, 24),
+      new THREE.MeshBasicMaterial({ color: 0x2a3d70 })
     );
     lens.rotation.x = -Math.PI / 2;
-    lens.position.y = 0.88;
+    lens.position.y = 0.70;
     tubePivot.add(lens);
-    const finder = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.45, 12), darkMat);
-    finder.position.set(0.2, 0.35, 0);
-    tubePivot.add(finder);
-    const eyepiece = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 0.22, 12), darkMat);
-    eyepiece.position.y = -0.6;
-    tubePivot.add(eyepiece);
-    telescope.add(tubePivot);
+    scopeTurn.add(tubePivot);
+    vespera.add(scopeTurn);
+    vespera.scale.setScalar(VESPERA_SIZE);
+    telescope.add(vespera);
+
+    // 망원경이 향한 방위(북 0, 동쪽으로 +)와 고도. 처음에는 북서쪽 하늘 45도(고니자리 쪽)를 본다
+    let telescopeAz = 0;
+    let telescopeAlt = 0;
+    function aimTelescope(az, alt) {
+      telescopeAz = az;
+      telescopeAlt = alt;
+      scopeTurn.rotation.y = -az;
+      tubePivot.rotation.x = -(Math.PI / 2 - alt);
+    }
+    aimTelescope(297 * Math.PI / 180, Math.PI / 4);
 
     const basaltGeo = new THREE.DodecahedronGeometry(0.22);
     const basaltMat = new THREE.MeshStandardMaterial({ color: 0x2c2f36, roughness: 1 });
@@ -167,70 +247,118 @@
     }
     const glowTex = makeGlowTexture();
     const STAR_R = 90;
-    const STAR_COLORS = [0xaecbff, 0xdfe8ff, 0xffffff, 0xffffff, 0xfff2d6, 0xffd29a, 0xffb27a];
     const sky = new THREE.Group();
 
-    // 하늘 전체에 고르게 흩어진 방향(지평선 조금 아래부터)
-    function pickSkyDir() {
-      const y = makeRandom() * 1.1 - 0.1;
-      const a = makeRandom() * Math.PI * 2;
-      const r = Math.sqrt(1 - y * y);
-      return new THREE.Vector3(Math.cos(a) * r, y, Math.sin(a) * r);
+    // 관측 자리와 시각: 2026년 11월 25일 밤 9시(한국 시각), 제주(북위 33.4도, 동경 126.5도)
+    const OBS_LAT = 33.4 * Math.PI / 180;
+    const START_LST = 11.1 * Math.PI / 180;      // 그 시각의 지방 항성시(약 0시 44분)
+    const SIDEREAL_RATE = 2 * Math.PI / 86164;   // 하늘이 1초에 도는 각도(실제 속도)
+    // 하늘의 북극 방향: 북쪽(-z)에서 위도만큼 들려 있다. 하늘은 이 축을 중심으로 돈다
+    const POLE_AXIS = new THREE.Vector3(0, Math.sin(OBS_LAT), -Math.cos(OBS_LAT));
+
+    // 적경·적위(도)를 시작 시각의 하늘 방향으로 바꾼다. 동쪽 +x, 위 +y, 북쪽 -z
+    function getSkyDir(raDeg, decDeg) {
+      const dec = decDeg * Math.PI / 180;
+      const hourAngle = START_LST - raDeg * Math.PI / 180;
+      const toMeridian = Math.cos(dec) * Math.cos(hourAngle);
+      const toEast = -Math.cos(dec) * Math.sin(hourAngle);
+      const toPole = Math.sin(dec);
+      const north = -toMeridian * Math.sin(OBS_LAT) + toPole * Math.cos(OBS_LAT);
+      const up = toMeridian * Math.cos(OBS_LAT) + toPole * Math.sin(OBS_LAT);
+      return new THREE.Vector3(toEast, up, -north);
     }
 
-    // 은하수 띠 위의 방향: 비스듬히 기운 큰 원 둘레에 모이게 한다
-    const bandNormal = new THREE.Vector3(0.3, 0.85, 0.43).normalize();
+    // B-V 색지수로 별빛 색을 정한다(파란 별 ~ 붉은 별)
+    const BV_COLORS = [[-0.3, 0x9bb0ff], [0, 0xcad7ff], [0.3, 0xf8f7ff], [0.6, 0xfff4e8], [1.0, 0xffd2a1], [1.5, 0xffb46b], [2.0, 0xff9a50]];
+    const colorA = new THREE.Color();
+    const colorB = new THREE.Color();
+    function getStarColor(bv, out) {
+      const k = BV_COLORS.findIndex(([v]) => bv < v);
+      if (k <= 0) return out.setHex(BV_COLORS[k === 0 ? 0 : BV_COLORS.length - 1][1]);
+      const [v0, c0] = BV_COLORS[k - 1];
+      const [v1, c1] = BV_COLORS[k];
+      return out.lerpColors(colorA.setHex(c0), colorB.setHex(c1), (bv - v0) / (v1 - v0));
+    }
+
+    // 자리·색 배열로 빛나는 점 묶음을 만들어 하늘에 붙인다
+    function makePoints(pos, col, size, opacity) {
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+      const points = new THREE.Points(geo, new THREE.PointsMaterial({
+        size, map: glowTex, vertexColors: true, transparent: true, opacity,
+        depthWrite: false, blending: THREE.AdditiveBlending, fog: false,
+      }));
+      sky.add(points);
+      return points;
+    }
+
+    // 실제 별(6등급까지): 등급 묶음마다 크기와 밝기를 달리한다
+    const MAG_LAYERS = [
+      { maxMag: 1.5, size: 4.2, opacity: 1 },
+      { maxMag: 2.5, size: 3.2, opacity: 1 },
+      { maxMag: 3.5, size: 2.4, opacity: 0.95 },
+      { maxMag: 4.5, size: 1.7, opacity: 0.85 },
+      { maxMag: 5.2, size: 1.3, opacity: 0.8 },
+      { maxMag: 99, size: 1.0, opacity: 0.65 },
+    ];
+    const PICK_MAX_MAG = 4;     // 별자리 잇기로 고를 수 있는 가장 어두운 등급
+    const pickableStars = [];   // 고를 수 있는 별(하늘 묶음 기준 자리)
+    const layerPos = MAG_LAYERS.map(() => []);
+    const layerCol = MAG_LAYERS.map(() => []);
+    const starColor = new THREE.Color();
+    const starData = window.SKY_DATA.stars;
+    for (let i = 0; i < starData.length; i += 4) {
+      const mag = starData[i + 2];
+      const pos = getSkyDir(starData[i], starData[i + 1]).multiplyScalar(STAR_R);
+      const k = MAG_LAYERS.findIndex((l) => mag <= l.maxMag);
+      layerPos[k].push(pos.x, pos.y, pos.z);
+      getStarColor(starData[i + 3], starColor);
+      layerCol[k].push(starColor.r, starColor.g, starColor.b);
+      if (mag <= PICK_MAX_MAG) pickableStars.push(pos);
+    }
+    const starLayers = MAG_LAYERS.map((l, k) => makePoints(layerPos[k], layerCol[k], l.size, l.opacity));
+
+    // 은하수: 실제 은하면(은하 북극 적경 192.86도, 적위 27.13도)을 따라 흐린 빛과 작은 별을 뿌린다
+    const bandNormal = getSkyDir(192.86, 27.13);
     const bandU = new THREE.Vector3(1, 0, 0).cross(bandNormal).normalize();
     const bandV = bandNormal.clone().cross(bandU);
     function pickBandDir(spread) {
-      for (;;) {
-        const a = makeRandom() * Math.PI * 2;
-        const off = (makeRandom() + makeRandom() + makeRandom() - 1.5) * spread;
-        const d = bandU.clone().multiplyScalar(Math.cos(a))
-          .addScaledVector(bandV, Math.sin(a))
-          .addScaledVector(bandNormal, off)
-          .normalize();
-        if (d.y > -0.1) return d;
-      }
+      const a = makeRandom() * Math.PI * 2;
+      const off = (makeRandom() + makeRandom() + makeRandom() - 1.5) * spread;
+      return bandU.clone().multiplyScalar(Math.cos(a))
+        .addScaledVector(bandV, Math.sin(a))
+        .addScaledVector(bandNormal, off)
+        .normalize();
     }
-
-    // 같은 크기·밝기의 별을 한 묶음으로 만든다
-    function makeStarLayer(count, size, opacity, pickDir, colors) {
+    function makeBandLayer(count, size, opacity, spread, colors) {
       const pos = [];
       const col = [];
       const c = new THREE.Color();
       for (let i = 0; i < count; i++) {
-        const d = pickDir();
+        const d = pickBandDir(spread);
         pos.push(d.x * STAR_R, d.y * STAR_R, d.z * STAR_R);
         c.setHex(colors[Math.floor(makeRandom() * colors.length)]);
         col.push(c.r, c.g, c.b);
       }
-      const geo = new THREE.BufferGeometry();
-      geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-      geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
-      const layer = new THREE.Points(geo, new THREE.PointsMaterial({
-        size, map: glowTex, vertexColors: true, transparent: true, opacity,
-        depthWrite: false, blending: THREE.AdditiveBlending, fog: false,
-      }));
-      sky.add(layer);
-      return layer;
+      makePoints(pos, col, size, opacity);
     }
-    const BAND_COLORS = [0x9fb4ff, 0xc8d4ff, 0xe8e0ff];
-    makeStarLayer(450, 9, 0.05, () => pickBandDir(0.18), BAND_COLORS);       // 은하수의 뿌연 빛
-    makeStarLayer(2600, 0.7, 0.55, () => pickBandDir(0.12), STAR_COLORS);    // 은하수의 작은 별
-    makeStarLayer(1800, 0.9, 0.7, pickSkyDir, STAR_COLORS);                  // 어두운 별
-    const midStars = makeStarLayer(320, 1.7, 0.9, pickSkyDir, STAR_COLORS);  // 중간 별
-    const brightStars = makeStarLayer(40, 3.4, 1, pickSkyDir, STAR_COLORS);  // 밝은 별
+    makeBandLayer(800, 9, 0.05, 0.18, [0x9fb4ff, 0xc8d4ff, 0xe8e0ff]);   // 은하수의 뿌연 빛
+    makeBandLayer(4500, 0.6, 0.4, 0.12, [0xdfe8ff, 0xffffff, 0xfff2d6]); // 은하수의 작은 별
     scene.add(sky);
 
-    // 하늘은 아주 천천히 돌고, 밝은 별은 서로 다른 박자로 반짝인다
+    // 하늘은 북극 축을 중심으로 실제 속도로 돌고, 밝은 별은 서로 다른 박자로 반짝인다
     function updateStars(t) {
-      sky.rotation.y = t * 0.002;
-      midStars.material.opacity = 0.8 + Math.sin(t * 1.7) * 0.1;
-      brightStars.material.opacity = 0.85 + Math.sin(t * 2.6 + 1) * 0.15;
+      sky.quaternion.setFromAxisAngle(POLE_AXIS, -SIDEREAL_RATE * t);
+      starLayers[0].material.opacity = 0.88 + Math.sin(t * 2.6 + 1) * 0.12;
+      starLayers[1].material.opacity = 0.86 + Math.sin(t * 1.7) * 0.12;
     }
 
     // ---------- 인형 ----------
+    const shirtPrintTex = makeTextTexture(
+      [['MARUS', '#111111'], ['Y', '#22aee6'], ['S', '#111111'], [' edu', '#22aee6']],
+      1024, 236, '600 150px "Segoe UI", "Helvetica Neue", Arial, sans-serif'
+    );
     function makeDoll(color) {
       const g = new THREE.Group();
       const body = new THREE.Mesh(
@@ -240,6 +368,15 @@
       body.position.y = 0.5;
       body.scale.y = 1.15;
       g.add(body);
+      // 눈사람 아랫부분 등쪽(-z)에 옷 무늬처럼 MARUSYS edu 글씨를 두른다(몸에 붙여 같이 늘어나고 돈다)
+      const shirtPrint = new THREE.Mesh(
+        new THREE.SphereGeometry(0.455, 40, 8, Math.PI * 1.5 - 1.2, 2.4, Math.PI / 2 - 0.24, 0.48),
+        new THREE.MeshStandardMaterial({
+          map: shirtPrintTex, transparent: true, depthWrite: false,
+          emissive: 0xffffff, emissiveMap: shirtPrintTex, emissiveIntensity: 0.45,   // 어두운 밤에도 글씨가 보이게 살짝 빛낸다
+        })
+      );
+      body.add(shirtPrint);
       const head = new THREE.Mesh(
         new THREE.SphereGeometry(0.28, 20, 16),
         new THREE.MeshStandardMaterial({ color: 0xffd9b8 })
@@ -305,8 +442,12 @@
       }
       keepInWalkArea(target);
     }
-    // 마우스와 휴대폰 터치 모두 pointerdown 하나로 처리한다(별자리 잇기 중에는 별을 고른다)
-    renderer.domElement.addEventListener('pointerdown', (e) => (linking ? pickStar(e.clientX, e.clientY) : pickGround(e.clientX, e.clientY)));
+    // 마우스와 휴대폰 터치 모두 pointerdown 하나로 처리한다(망원경 화면에서는 끌기, 별자리 잇기 중에는 별 고르기)
+    renderer.domElement.addEventListener('pointerdown', (e) => {
+      if (scopeOn) startScopeDrag(e);
+      else if (linking) pickStar(e.clientX, e.clientY);
+      else pickGround(e.clientX, e.clientY);
+    });
 
     function updateMe(dt) {
       let step = SPEED * dt;
@@ -405,12 +546,6 @@
     }
     showCount();
 
-    // 고를 수 있는 별: 중간 별과 밝은 별(하늘 묶음 기준 자리)
-    const pickableStars = [];
-    for (const layer of [midStars, brightStars]) {
-      const p = layer.geometry.attributes.position;
-      for (let i = 0; i < p.count; i++) pickableStars.push(new THREE.Vector3(p.getX(i), p.getY(i), p.getZ(i)));
-    }
     const screenPos = new THREE.Vector3();
     // 누른 화면 자리에서 가장 가까운 별을 찾는다(PICK_PX 밖이면 없음)
     function findStarAt(clientX, clientY) {
@@ -469,7 +604,7 @@
       linkBtn.classList.toggle('on', linking);
       hintEl.textContent = linking
         ? '하늘의 별을 차례로 누르세요 (' + current.stars.length + '/' + LINK_COUNT + ')'
-        : HINT_WALK;
+        : (scopeOn ? HINT_SCOPE : HINT_WALK);
     }
     function startLinking() {
       linking = true;
@@ -511,6 +646,13 @@
     // 완성한 별자리는 10초 동안 보이고, 마지막 2초 동안 흐려지며 사라진다
     function updateLinks(t) {
       nowT = t;
+      // 망원경으로 확대해도 금색 선이 화면에서 비슷한 굵기로 보이게 한다
+      const thick = camera.fov / WALK_FOV;
+      for (const c of current ? [current, ...finished] : finished) {
+        for (const o of c.group.children) {
+          if (o.isMesh) o.scale.set(thick, 1, thick);
+        }
+      }
       for (let i = finished.length - 1; i >= 0; i--) {
         const c = finished[i];
         const left = c.endAt - t;
@@ -523,6 +665,262 @@
         c.lineMat.opacity = opacity;
         c.markMat.opacity = opacity;
       }
+    }
+
+    // ---------- 망원경 보기 ----------
+    const SCOPE_NEAR = 6;                               // 망원경에서 이 거리 안이면 버튼이 보인다
+    const SCOPE_EYE = new THREE.Vector3(0, 2.4, 0);     // 접안렌즈 자리
+    const WALK_FOV = camera.fov;
+    const SCOPE_FOVS = [50, 30, 15, 6, 2];              // 확대 단계별 시야(도): 약 ×1, ×2, ×4, ×10, ×30
+    const SCOPE_MIN_ALT = -88 * Math.PI / 180;          // 땅을 숨기므로 지평선 아래까지 내려 본다
+    const TELESCOPE_MIN_ALT = 5 * Math.PI / 180;        // 나올 때 망원경 몸통은 이보다 낮게 숙이지 않는다
+    const SCOPE_MAX_ALT = 88 * Math.PI / 180;
+    const KEY_TURN = 0.7;                               // 방향키로 1초에 도는 각도(라디안, ×1 기준)
+    const TAP_PX = 8;                                   // 이보다 덜 움직이면 끌기가 아니라 누르기
+    const HINT_SCOPE = '끌어서 둘러보기 · 별자리를 누르면 이름';
+    const LINE_COLOR = 0x7f9cff;                        // 별자리 선 평소 색
+    const LINE_LIT_COLOR = 0xffe9a8;                    // 누른 별자리 선 색
+    const NAME_SHOW = 3;                                // 별자리 이름이 떠 있는 시간(초)
+    const NAME_PICK_PX = 30;                            // 누른 곳에서 이 거리(px) 안의 별자리 선을 고른다
+    const scopeBtn = document.getElementById('scopeBtn');
+    const zoomLabel = document.getElementById('zoomLabel');
+    let scopeOn = false;
+    let scopeAz = 0;      // 보는 방위(북 0, 동쪽으로 +)
+    let scopeAlt = 0;     // 보는 고도
+    let zoomLevel = 1;
+    let drag = null;      // 끄는 중인 손가락·마우스 자리
+    let scopeBtnShown = false;
+
+    // 별자리 선: 하늘에 붙여 두고 망원경 화면에서만 은은하게 보인다
+    const constellations = window.SKY_DATA.constellations.map((c) => {
+      const pos = [];
+      for (const path of c.lines) {
+        for (let i = 0; i + 3 < path.length; i += 2) {
+          const a = getSkyDir(path[i], path[i + 1]).multiplyScalar(STAR_R * 0.99);
+          const b = getSkyDir(path[i + 2], path[i + 3]).multiplyScalar(STAR_R * 0.99);
+          pos.push(a.x, a.y, a.z, b.x, b.y, b.z);
+        }
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      const line = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({
+        color: LINE_COLOR, transparent: true, opacity: 0.35, depthWrite: false, fog: false,
+      }));
+      line.visible = false;
+      sky.add(line);
+      return { id: c.id, ko: c.ko, label: getSkyDir(c.label[0], c.label[1]).multiplyScalar(STAR_R), line };
+    });
+
+    // ---- 별자리를 누르면 한글 이름 ----
+    const conNameEl = document.getElementById('conName');
+    let shownName = null;   // 지금 이름을 띄운 별자리 { ko, label, endAt }
+    const segA = new THREE.Vector3();
+    const segB = new THREE.Vector3();
+    const labelPos = new THREE.Vector3();
+    // 하늘 묶음 기준 자리를 화면 좌표(px)로 바꾼다. 카메라 뒤면 false(땅을 숨긴 망원경 화면에서 쓰므로 지평선 아래도 고른다)
+    function getScreenPoint(local, out) {
+      out.copy(local).applyMatrix4(sky.matrixWorld);
+      out.project(camera);
+      if (out.z > 1) return false;
+      out.set((out.x + 1) / 2 * innerWidth, (1 - out.y) / 2 * innerHeight, 0);
+      return true;
+    }
+    // 화면의 한 점에서 선분까지 거리(px)
+    function getDistanceToSegment(px, py, a, b) {
+      const vx = b.x - a.x;
+      const vy = b.y - a.y;
+      const len2 = vx * vx + vy * vy || 1;
+      const k = Math.max(0, Math.min(1, ((px - a.x) * vx + (py - a.y) * vy) / len2));
+      return Math.hypot(px - (a.x + vx * k), py - (a.y + vy * k));
+    }
+    // 누른 곳에서 가장 가까운 별자리 선을 찾는다(NAME_PICK_PX 밖이면 없음)
+    function findConstellationAt(clientX, clientY) {
+      let best = null;
+      let bestD = NAME_PICK_PX;
+      for (const c of constellations) {
+        const p = c.line.geometry.attributes.position;
+        for (let i = 0; i < p.count; i += 2) {
+          if (!getScreenPoint(segA.fromBufferAttribute(p, i), segA)) continue;
+          if (!getScreenPoint(segB.fromBufferAttribute(p, i + 1), segB)) continue;
+          const d = getDistanceToSegment(clientX, clientY, segA, segB);
+          if (d < bestD) {
+            bestD = d;
+            best = c;
+          }
+        }
+      }
+      return best;
+    }
+    // 같은 이름의 조각(뱀자리 머리·꼬리)까지 함께 밝히고 이름을 띄운다
+    function lightConstellation(ko) {
+      for (const c of constellations) {
+        const lit = c.ko === ko;
+        c.line.material.color.setHex(lit ? LINE_LIT_COLOR : LINE_COLOR);
+        c.line.material.opacity = lit ? 0.95 : 0.35;
+      }
+    }
+    function showConstellationName(c) {
+      lightConstellation(c.ko);
+      shownName = { ko: c.ko, label: c.label, endAt: nowT + NAME_SHOW };
+      conNameEl.textContent = c.ko;
+    }
+    function hideConstellationName() {
+      shownName = null;
+      lightConstellation(null);
+      conNameEl.style.display = 'none';
+    }
+    // 이름표는 별자리 이름 자리를 따라다니고, 3초가 지나면 사라진다
+    function updateConstellationName() {
+      if (!shownName) return;
+      if (nowT > shownName.endAt) {
+        hideConstellationName();
+        return;
+      }
+      const onScreen = getScreenPoint(shownName.label, labelPos);
+      conNameEl.style.display = onScreen ? 'block' : 'none';
+      if (!onScreen) return;
+      conNameEl.style.left = Math.max(70, Math.min(innerWidth - 70, labelPos.x)) + 'px';
+      conNameEl.style.top = Math.max(80, Math.min(innerHeight - 140, labelPos.y)) + 'px';
+    }
+
+    const scopeTarget = new THREE.Vector3();
+    function aimScopeCamera() {
+      const cosAlt = Math.cos(scopeAlt);
+      scopeTarget.set(Math.sin(scopeAz) * cosAlt, Math.sin(scopeAlt), -Math.cos(scopeAz) * cosAlt).add(SCOPE_EYE);
+      camera.position.copy(SCOPE_EYE);
+      camera.lookAt(scopeTarget);
+    }
+    function turnScope(dAz, dAlt) {
+      scopeAz += dAz;
+      scopeAlt = Math.max(SCOPE_MIN_ALT, Math.min(SCOPE_MAX_ALT, scopeAlt + dAlt));
+    }
+    // 확대 단계를 바꾼다
+    function setZoom(level) {
+      zoomLevel = Math.max(0, Math.min(SCOPE_FOVS.length - 1, level));
+      zoomLabel.textContent = '×' + Math.max(1, Math.round(WALK_FOV / SCOPE_FOVS[zoomLevel]));
+      updateStarLook();
+    }
+    // 망원경은 빛을 더 모으므로 별이 더 밝고 크게 보인다(확대할수록 더). 맨눈 화면은 원래대로
+    function updateStarLook() {
+      const gain = scopeOn ? 1 + zoomLevel / (SCOPE_FOVS.length - 1) : 0;   // 0(맨눈), 1(×1) ~ 2(×30)
+      MAG_LAYERS.forEach((l, k) => {
+        starLayers[k].material.size = l.size * (1 + 0.45 * gain);
+        starLayers[k].material.opacity = Math.min(1, l.opacity + 0.2 * gain);
+      });
+    }
+    // 세로 화면에서도 둥근 시야의 지름이 정한 시야각이 되도록 세로 시야각을 맞춘다
+    function getScopeFov(level) {
+      const want = SCOPE_FOVS[level] * Math.PI / 180;
+      const aspect = Math.min(1, camera.aspect);
+      return 2 * Math.atan(Math.tan(want / 2) / aspect) * 180 / Math.PI;
+    }
+    function showConstellationLines(show) {
+      for (const c of constellations) c.line.visible = show;
+    }
+    // 지평선: 땅을 숨긴 망원경 화면에서 방향을 잃지 않게 옅은 선으로 둘러 그린다
+    const horizonPoints = [];
+    for (let i = 0; i < 128; i++) {
+      const a = (i / 128) * Math.PI * 2;
+      horizonPoints.push(new THREE.Vector3(Math.cos(a) * 88, SCOPE_EYE.y, Math.sin(a) * 88));
+    }
+    const horizonLine = new THREE.LineLoop(
+      new THREE.BufferGeometry().setFromPoints(horizonPoints),
+      new THREE.LineBasicMaterial({ color: 0x6f9a7a, transparent: true, opacity: 0.55, fog: false })
+    );
+    horizonLine.visible = false;
+    scene.add(horizonLine);
+    // 망원경 화면에서는 땅·먼 오름을 숨기고 지평선 선을 보인다
+    function showLand(show) {
+      ground.visible = show;
+      farHills.visible = show;
+      horizonLine.visible = !show;
+    }
+    // 들어갈 때는 망원경이 향한 쪽을 보고, 나올 때는 망원경이 마지막으로 본 쪽을 향하게 둔다
+    function enterScope() {
+      scopeOn = true;
+      scopeAz = telescopeAz;
+      scopeAlt = telescopeAlt;
+      telescope.visible = false;
+      me.visible = false;
+      showLand(false);
+      setZoom(1);
+      showConstellationLines(true);
+      document.body.classList.add('scope');
+      scopeBtn.textContent = '망원경에서 나오기';
+      aimScopeCamera();
+      updateLinkUi();
+    }
+    function leaveScope() {
+      scopeOn = false;
+      drag = null;
+      aimTelescope(scopeAz, Math.max(TELESCOPE_MIN_ALT, scopeAlt));
+      telescope.visible = true;
+      me.visible = true;
+      showLand(true);
+      setZoom(zoomLevel);
+      hideConstellationName();
+      showConstellationLines(false);
+      camera.fov = WALK_FOV;
+      camera.updateProjectionMatrix();
+      document.body.classList.remove('scope');
+      scopeBtn.textContent = '망원경 보기';
+      updateLinkUi();
+    }
+    scopeBtn.addEventListener('click', () => (scopeOn ? leaveScope() : enterScope()));
+    document.getElementById('zoomIn').addEventListener('click', () => setZoom(zoomLevel + 1));
+    document.getElementById('zoomOut').addEventListener('click', () => setZoom(zoomLevel - 1));
+
+    // 끌어서 둘러보기: 하늘을 잡아당기는 방향으로 움직인다. 거의 안 움직이고 떼면 누르기로 본다
+    function startScopeDrag(e) {
+      drag = { x: e.clientX, y: e.clientY, moved: 0 };
+    }
+    renderer.domElement.addEventListener('pointermove', (e) => {
+      if (!scopeOn || !drag) return;
+      const dx = e.clientX - drag.x;
+      const dy = e.clientY - drag.y;
+      drag.x = e.clientX;
+      drag.y = e.clientY;
+      drag.moved += Math.abs(dx) + Math.abs(dy);
+      const perPx = camera.fov * Math.PI / 180 / innerHeight;
+      turnScope(-dx * perPx, dy * perPx);
+    });
+    renderer.domElement.addEventListener('pointerup', (e) => {
+      if (!scopeOn || !drag) return;
+      const tapped = drag.moved < TAP_PX;
+      drag = null;
+      if (!tapped) return;
+      if (linking) {
+        pickStar(e.clientX, e.clientY);
+        return;
+      }
+      const c = findConstellationAt(e.clientX, e.clientY);
+      if (c) showConstellationName(c);
+    });
+    renderer.domElement.addEventListener('pointercancel', () => { drag = null; });
+    renderer.domElement.addEventListener('wheel', (e) => {
+      if (!scopeOn) return;
+      e.preventDefault();
+      setZoom(zoomLevel + (e.deltaY < 0 ? 1 : -1));
+    }, { passive: false });
+
+    // 망원경 화면: 방향키로 돌리고, 시야를 확대 단계로 부드럽게 맞춘다
+    function updateScope(dt) {
+      const turn = KEY_TURN * dt * camera.fov / WALK_FOV;
+      if (keys.KeyA || keys.ArrowLeft) turnScope(-turn, 0);
+      if (keys.KeyD || keys.ArrowRight) turnScope(turn, 0);
+      if (keys.KeyW || keys.ArrowUp) turnScope(0, turn);
+      if (keys.KeyS || keys.ArrowDown) turnScope(0, -turn);
+      camera.fov += (getScopeFov(zoomLevel) - camera.fov) * (1 - Math.exp(-8 * dt));
+      camera.updateProjectionMatrix();
+      aimScopeCamera();
+      updateConstellationName();
+    }
+    // 망원경 가까이 있을 때만 버튼을 보인다
+    function updateScopeButton() {
+      const show = scopeOn || Math.hypot(me.position.x, me.position.z) < SCOPE_NEAR;
+      if (show === scopeBtnShown) return;
+      scopeBtnShown = show;
+      scopeBtn.style.display = show ? 'block' : 'none';
     }
 
     // ---------- 소리 (Web Audio, 소리 파일 없음) ----------
@@ -650,8 +1048,13 @@
     function animate() {
       const dt = Math.min(clock.getDelta(), 0.1);
       const t = clock.elapsedTime;
-      updateMe(dt);
-      updateCamera(dt);
+      if (scopeOn) {
+        updateScope(dt);
+      } else {
+        updateMe(dt);
+        updateCamera(dt);
+      }
+      updateScopeButton();
       updateStars(t);
       updateLinks(t);
       renderer.render(scene, camera);
