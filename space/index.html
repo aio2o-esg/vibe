@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>온라인 천문대</title>
+  <style>
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #05070f; touch-action: none; }
+    canvas { display: block; }
+    #hint { position: fixed; left: 0; right: 0; top: 10px; text-align: center; color: #cfd6ff; font: 14px sans-serif; opacity: 0.8; pointer-events: none; }
+    #count { position: fixed; left: 0; right: 0; top: 34px; text-align: center; color: #ffd98a; font: 16px sans-serif; pointer-events: none; }
+    #linkBtn { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); padding: 14px 28px; font: 18px sans-serif; color: #2a1d05; background: #ffcc44; border: 0; border-radius: 28px; cursor: pointer; }
+    #linkBtn.on { color: #ffe9a8; background: rgba(40, 32, 10, 0.85); border: 1px solid #ffcc44; }
+    #soundBtn { position: fixed; right: 12px; top: 62px; padding: 8px 14px; font: 14px sans-serif; color: #cfd6ff; background: rgba(30, 36, 80, 0.8); border: 1px solid #5560a8; border-radius: 18px; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <div id="hint">바닥을 누르거나 WASD · 방향키로 걷기</div>
+  <div id="count">오늘 만든 별자리 0개</div>
+  <button id="linkBtn" type="button">별자리 잇기</button>
+  <button id="soundBtn" type="button">소리 켜기</button>
+  <script type="module">
+    import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+
+    // 고정 난수: 새로고침해도, 누가 열어도 별과 먼 오름 자리가 같다
+    let seed = 20261110;
+    function makeRandom() {
+      seed = (seed * 1664525 + 1013904223) % 4294967296;
+      return seed / 4294967296;
+    }
+
+    // ---------- 장면 ----------
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x070a1c);
+    scene.fog = new THREE.Fog(0x070a1c, 25, 70);
+
+    const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 200);
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    document.body.appendChild(renderer.domElement);
+
+    scene.add(new THREE.AmbientLight(0x333a66, 0.8));
+    const moon = new THREE.DirectionalLight(0x8899ff, 0.25);
+    moon.position.set(-10, 20, 5);
+    scene.add(moon);
+
+    // 별빛: 하늘 쪽은 푸르스름하게, 땅 쪽은 어둡게 비춘다
+    scene.add(new THREE.HemisphereLight(0x5566aa, 0x1a2418, 2.2));
+
+    // 오름: 걸어 다니는 꼭대기는 평평하고, 그 바깥은 완만하게 내려간다
+    const TOP_R = 37;       // 평평한 꼭대기 반지름(걷는 끝 35보다 조금 넓게)
+    const HILL_R = 90;      // 오름 자락 끝
+    const HILL_DROP = 16;   // 꼭대기에서 자락 끝까지 내려가는 높이
+    function getHillHeight(r) {
+      if (r <= TOP_R) return 0;
+      const k = Math.min(1, (r - TOP_R) / (HILL_R - TOP_R));
+      return -HILL_DROP * k * k * (3 - 2 * k);
+    }
+    const hillGeo = new THREE.RingGeometry(0, HILL_R, 96, 48);
+    const hillPos = hillGeo.attributes.position;
+    for (let i = 0; i < hillPos.count; i++) {
+      hillPos.setZ(i, getHillHeight(Math.hypot(hillPos.getX(i), hillPos.getY(i))));
+    }
+    hillGeo.computeVertexNormals();
+    const ground = new THREE.Mesh(
+      hillGeo,
+      new THREE.MeshStandardMaterial({ color: 0x1d2a1a, roughness: 1 })
+    );
+    ground.rotation.x = -Math.PI / 2;
+    scene.add(ground);
+
+    // 멀리 보이는 다른 오름들: 지평선의 별을 가리는 검은 능선
+    const farHillGeo = new THREE.SphereGeometry(1, 32, 12, 0, Math.PI * 2, 0, Math.PI / 2);
+    const farHillMat = new THREE.MeshBasicMaterial({ color: 0x03050b, fog: false });
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2 + makeRandom() * 0.3;
+      const farHill = new THREE.Mesh(farHillGeo, farHillMat);
+      farHill.scale.set(18 + makeRandom() * 14, 14 + makeRandom() * 12, 8);
+      farHill.position.set(Math.cos(a) * 84, -HILL_DROP, Math.sin(a) * 84);
+      farHill.rotation.y = Math.PI / 2 - a;
+      scene.add(farHill);
+    }
+
+    // 망원경: 세발 받침 + 경통 + 보조 망원경 + 접안렌즈, 받침 둘레에 낮은 현무암 테두리
+    const telescope = new THREE.Group();
+    const metalMat = new THREE.MeshStandardMaterial({ color: 0x9aa3b5, metalness: 0.6, roughness: 0.4 });
+    const darkMat = new THREE.MeshStandardMaterial({ color: 0x22252e, metalness: 0.3, roughness: 0.6 });
+    const tubeMat = new THREE.MeshStandardMaterial({ color: 0xe8ebf2, metalness: 0.2, roughness: 0.35 });
+    const MOUNT_Y = 1.45;
+    const up = new THREE.Vector3(0, 1, 0);
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * Math.PI * 2 + Math.PI / 6;
+      const top = new THREE.Vector3(0, MOUNT_Y, 0);
+      const foot = new THREE.Vector3(Math.cos(a) * 0.65, 0, Math.sin(a) * 0.65);
+      const dir = top.clone().sub(foot);
+      const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.05, dir.length(), 8), metalMat);
+      leg.position.copy(foot).add(top).multiplyScalar(0.5);
+      leg.quaternion.setFromUnitVectors(up, dir.normalize());
+      telescope.add(leg);
+    }
+    const mount = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.2, 0.28), darkMat);
+    mount.position.y = MOUNT_Y;
+    telescope.add(mount);
+
+    // 경통은 받침 위에서 비스듬히 옆을 향해 하늘 쪽으로 45도 들려 있다
+    const tubePivot = new THREE.Group();
+    tubePivot.position.y = MOUNT_Y + 0.15;
+    tubePivot.rotation.order = 'YXZ';
+    tubePivot.rotation.set(-Math.PI / 4, 1.1, 0);
+    const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 1.4, 24), tubeMat);
+    tube.position.y = 0.2;
+    tubePivot.add(tube);
+    const dewShield = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.3, 24, 1, true), darkMat);
+    dewShield.position.y = 0.95;
+    tubePivot.add(dewShield);
+    const lens = new THREE.Mesh(
+      new THREE.CircleGeometry(0.15, 24),
+      new THREE.MeshBasicMaterial({ color: 0x7f9cff, transparent: true, opacity: 0.7 })
+    );
+    lens.rotation.x = -Math.PI / 2;
+    lens.position.y = 0.88;
+    tubePivot.add(lens);
+    const finder = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.45, 12), darkMat);
+    finder.position.set(0.2, 0.35, 0);
+    tubePivot.add(finder);
+    const eyepiece = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 0.22, 12), darkMat);
+    eyepiece.position.y = -0.6;
+    tubePivot.add(eyepiece);
+    telescope.add(tubePivot);
+
+    const basaltGeo = new THREE.DodecahedronGeometry(0.22);
+    const basaltMat = new THREE.MeshStandardMaterial({ color: 0x2c2f36, roughness: 1 });
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2;
+      const stone = new THREE.Mesh(basaltGeo, basaltMat);
+      stone.position.set(Math.cos(a) * 1.45, 0.06, Math.sin(a) * 1.45);
+      stone.scale.y = 0.45;
+      telescope.add(stone);
+    }
+
+    // 관측할 때 쓰는 작은 붉은 등: 눈부시지 않게 받침 주변만 비춘다
+    const redLamp = new THREE.Mesh(
+      new THREE.SphereGeometry(0.06, 12, 8),
+      new THREE.MeshBasicMaterial({ color: 0xff4a3a })
+    );
+    redLamp.position.set(0.8, 0.1, 0.6);
+    telescope.add(redLamp);
+    const redLight = new THREE.PointLight(0xff4433, 4, 7, 2);
+    redLight.position.set(0.8, 0.4, 0.6);
+    telescope.add(redLight);
+    scene.add(telescope);
+
+    // 별: 코드로 그린 둥근 빛 무늬로 별마다 빛이 번지게 한다
+    function makeGlowTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = 64;
+      const g = canvas.getContext('2d');
+      const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+      grad.addColorStop(0, 'rgba(255,255,255,1)');
+      grad.addColorStop(0.18, 'rgba(255,255,255,0.85)');
+      grad.addColorStop(0.45, 'rgba(255,255,255,0.15)');
+      grad.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = grad;
+      g.fillRect(0, 0, 64, 64);
+      return new THREE.CanvasTexture(canvas);
+    }
+    const glowTex = makeGlowTexture();
+    const STAR_R = 90;
+    const STAR_COLORS = [0xaecbff, 0xdfe8ff, 0xffffff, 0xffffff, 0xfff2d6, 0xffd29a, 0xffb27a];
+    const sky = new THREE.Group();
+
+    // 하늘 전체에 고르게 흩어진 방향(지평선 조금 아래부터)
+    function pickSkyDir() {
+      const y = makeRandom() * 1.1 - 0.1;
+      const a = makeRandom() * Math.PI * 2;
+      const r = Math.sqrt(1 - y * y);
+      return new THREE.Vector3(Math.cos(a) * r, y, Math.sin(a) * r);
+    }
+
+    // 은하수 띠 위의 방향: 비스듬히 기운 큰 원 둘레에 모이게 한다
+    const bandNormal = new THREE.Vector3(0.3, 0.85, 0.43).normalize();
+    const bandU = new THREE.Vector3(1, 0, 0).cross(bandNormal).normalize();
+    const bandV = bandNormal.clone().cross(bandU);
+    function pickBandDir(spread) {
+      for (;;) {
+        const a = makeRandom() * Math.PI * 2;
+        const off = (makeRandom() + makeRandom() + makeRandom() - 1.5) * spread;
+        const d = bandU.clone().multiplyScalar(Math.cos(a))
+          .addScaledVector(bandV, Math.sin(a))
+          .addScaledVector(bandNormal, off)
+          .normalize();
+        if (d.y > -0.1) return d;
+      }
+    }
+
+    // 같은 크기·밝기의 별을 한 묶음으로 만든다
+    function makeStarLayer(count, size, opacity, pickDir, colors) {
+      const pos = [];
+      const col = [];
+      const c = new THREE.Color();
+      for (let i = 0; i < count; i++) {
+        const d = pickDir();
+        pos.push(d.x * STAR_R, d.y * STAR_R, d.z * STAR_R);
+        c.setHex(colors[Math.floor(makeRandom() * colors.length)]);
+        col.push(c.r, c.g, c.b);
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+      const layer = new THREE.Points(geo, new THREE.PointsMaterial({
+        size, map: glowTex, vertexColors: true, transparent: true, opacity,
+        depthWrite: false, blending: THREE.AdditiveBlending, fog: false,
+      }));
+      sky.add(layer);
+      return layer;
+    }
+    const BAND_COLORS = [0x9fb4ff, 0xc8d4ff, 0xe8e0ff];
+    makeStarLayer(450, 9, 0.05, () => pickBandDir(0.18), BAND_COLORS);       // 은하수의 뿌연 빛
+    makeStarLayer(2600, 0.7, 0.55, () => pickBandDir(0.12), STAR_COLORS);    // 은하수의 작은 별
+    makeStarLayer(1800, 0.9, 0.7, pickSkyDir, STAR_COLORS);                  // 어두운 별
+    const midStars = makeStarLayer(320, 1.7, 0.9, pickSkyDir, STAR_COLORS);  // 중간 별
+    const brightStars = makeStarLayer(40, 3.4, 1, pickSkyDir, STAR_COLORS);  // 밝은 별
+    scene.add(sky);
+
+    // 하늘은 아주 천천히 돌고, 밝은 별은 서로 다른 박자로 반짝인다
+    function updateStars(t) {
+      sky.rotation.y = t * 0.002;
+      midStars.material.opacity = 0.8 + Math.sin(t * 1.7) * 0.1;
+      brightStars.material.opacity = 0.85 + Math.sin(t * 2.6 + 1) * 0.15;
+    }
+
+    // ---------- 인형 ----------
+    function makeDoll(color) {
+      const g = new THREE.Group();
+      const body = new THREE.Mesh(
+        new THREE.SphereGeometry(0.45, 20, 16),
+        new THREE.MeshStandardMaterial({ color })
+      );
+      body.position.y = 0.5;
+      body.scale.y = 1.15;
+      g.add(body);
+      const head = new THREE.Mesh(
+        new THREE.SphereGeometry(0.28, 20, 16),
+        new THREE.MeshStandardMaterial({ color: 0xffd9b8 })
+      );
+      head.position.y = 1.25;
+      g.add(head);
+      return g;
+    }
+    const me = makeDoll(0xe8643c);
+    me.position.set(0, 0, 5);
+    scene.add(me);
+
+    // ---------- 걷기 ----------
+    const SPEED = 4;      // 1초에 걷는 거리
+    const WALK_R = 35;    // 걸을 수 있는 바깥 끝
+    const FIRE_R = 1.7;   // 모닥불 돌 둘레, 이 안으로는 못 들어간다
+    const MOVE_KEYS = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowLeft', 'ArrowDown', 'ArrowRight'];
+    const keys = {};
+    let target = null;    // 바닥을 눌러 정한 목적지
+
+    addEventListener('keydown', (e) => {
+      if (!MOVE_KEYS.includes(e.code)) return;
+      keys[e.code] = true;
+      target = null;
+    });
+    addEventListener('keyup', (e) => { keys[e.code] = false; });
+    // 창을 벗어나면 누르고 있던 키를 모두 뗀 것으로 본다
+    addEventListener('blur', () => { for (const k of MOVE_KEYS) keys[k] = false; });
+
+    // 자리를 걸을 수 있는 곳(불 바깥, 캠핑장 안)으로 옮긴다
+    function keepInWalkArea(pos) {
+      const r = Math.hypot(pos.x, pos.z);
+      if (r > WALK_R) {
+        pos.x *= WALK_R / r;
+        pos.z *= WALK_R / r;
+      } else if (r < 0.001) {
+        pos.x = 0;
+        pos.z = FIRE_R;
+      } else if (r < FIRE_R) {
+        pos.x *= FIRE_R / r;
+        pos.z *= FIRE_R / r;
+      }
+    }
+
+    const raycaster = new THREE.Raycaster();
+    const pointer = new THREE.Vector2();
+    function pickGround(clientX, clientY) {
+      pointer.set((clientX / innerWidth) * 2 - 1, -(clientY / innerHeight) * 2 + 1);
+      raycaster.setFromCamera(pointer, camera);
+      const hit = raycaster.intersectObject(ground)[0];
+      if (hit) {
+        target = hit.point.clone();
+      } else {
+        // 하늘처럼 바닥이 아닌 곳을 누르면 그 방향으로 캠핑장 끝까지 걷는다
+        const dir = raycaster.ray.direction;
+        const len = Math.hypot(dir.x, dir.z);
+        if (len < 0.001) return;
+        const dx = dir.x / len, dz = dir.z / len;
+        const b = me.position.x * dx + me.position.z * dz;
+        const c = me.position.x * me.position.x + me.position.z * me.position.z - WALK_R * WALK_R;
+        const far = -b + Math.sqrt(Math.max(0, b * b - c));
+        target = new THREE.Vector3(me.position.x + dx * far, 0, me.position.z + dz * far);
+      }
+      keepInWalkArea(target);
+    }
+    // 마우스와 휴대폰 터치 모두 pointerdown 하나로 처리한다(별자리 잇기 중에는 별을 고른다)
+    renderer.domElement.addEventListener('pointerdown', (e) => (linking ? pickStar(e.clientX, e.clientY) : pickGround(e.clientX, e.clientY)));
+
+    function updateMe(dt) {
+      let step = SPEED * dt;
+      let dx = 0, dz = 0;
+      let kx = 0, kz = 0;   // kx: 화면 오른쪽, kz: 화면 위쪽
+      if (keys.KeyW || keys.ArrowUp) kz += 1;
+      if (keys.KeyS || keys.ArrowDown) kz -= 1;
+      if (keys.KeyA || keys.ArrowLeft) kx -= 1;
+      if (keys.KeyD || keys.ArrowRight) kx += 1;
+      if (kx || kz) {
+        // 카메라가 보는 방향을 바닥에 눕혀 화면 위쪽(f)을 구하고, 키를 그 기준으로 옮긴다
+        let fx = me.position.x - camera.position.x;
+        let fz = me.position.z - camera.position.z;
+        const fl = Math.hypot(fx, fz) || 1;
+        fx /= fl;
+        fz /= fl;
+        dx = fx * kz - fz * kx;
+        dz = fz * kz + fx * kx;
+        const len = Math.hypot(dx, dz);
+        dx /= len;
+        dz /= len;
+      } else if (target) {
+        const vx = target.x - me.position.x, vz = target.z - me.position.z;
+        const d = Math.hypot(vx, vz);
+        if (d < 0.05) {
+          target = null;
+        } else {
+          dx = vx / d;
+          dz = vz / d;
+          step = Math.min(step, d);
+        }
+      }
+      if (dx || dz) {
+        const oldX = me.position.x, oldZ = me.position.z;
+        me.position.x += dx * step;
+        me.position.z += dz * step;
+        keepInWalkArea(me.position);
+        me.rotation.y = Math.atan2(dx, dz);
+        // 불이나 가장자리에 막혀 거의 못 움직이면 목적지를 지운다
+        const went = Math.hypot(me.position.x - oldX, me.position.z - oldZ);
+        if (target && went < step * 0.1) target = null;
+      }
+    }
+
+    // ---------- 카메라 ----------
+    const CAM_BACK = 8, CAM_UP = 4.5;
+    const toFire = new THREE.Vector3();
+    const camWant = new THREE.Vector3();
+    function updateCamera(dt) {
+      // 인형 뒤(불 반대편)에 카메라를 두어 불이 늘 화면에 들어오게 한다
+      toFire.set(-me.position.x, 0, -me.position.z).normalize();
+      camWant.set(
+        me.position.x - toFire.x * CAM_BACK,
+        CAM_UP,
+        me.position.z - toFire.z * CAM_BACK
+      );
+      camera.position.lerp(camWant, 1 - Math.exp(-5 * dt));
+      camera.lookAt(me.position.x, 1.2, me.position.z);
+    }
+
+    // ---------- 별자리 잇기 ----------
+    const LINK_COUNT = 10;    // 한 별자리에 잇는 별 수
+    const LINK_LIFE = 10;     // 완성한 별자리가 보이는 시간(초)
+    const LINK_FADE = 2;      // 사라지기 전에 흐려지는 시간(초)
+    const PICK_PX = 28;       // 누른 곳에서 이 거리(px) 안의 별만 고른다
+    const GOLD = 0xffcc44;
+    const linkBtn = document.getElementById('linkBtn');
+    const countEl = document.getElementById('count');
+    const hintEl = document.getElementById('hint');
+    const HINT_WALK = hintEl.textContent;
+
+    // 오늘 만든 별자리 수: 날짜마다 따로 브라우저에 저장한다
+    function getTodayKey() {
+      const d = new Date();
+      return 'space-constellations-' + d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate();
+    }
+    function loadTodayCount() {
+      try {
+        return parseInt(localStorage.getItem(getTodayKey()) || '0', 10) || 0;
+      } catch (e) {
+        console.warn('오늘 만든 별자리 수를 읽지 못했습니다.', e);
+        return 0;
+      }
+    }
+    function saveTodayCount(n) {
+      try {
+        localStorage.setItem(getTodayKey(), String(n));
+      } catch (e) {
+        console.warn('오늘 만든 별자리 수를 저장하지 못했습니다.', e);
+      }
+    }
+    // 저장소를 못 쓰는 브라우저에서도 열려 있는 동안은 숫자가 오르도록 메모리에도 둔다
+    let todayCount = loadTodayCount();
+    function showCount() {
+      countEl.textContent = '오늘 만든 별자리 ' + todayCount + '개';
+    }
+    showCount();
+
+    // 고를 수 있는 별: 중간 별과 밝은 별(하늘 묶음 기준 자리)
+    const pickableStars = [];
+    for (const layer of [midStars, brightStars]) {
+      const p = layer.geometry.attributes.position;
+      for (let i = 0; i < p.count; i++) pickableStars.push(new THREE.Vector3(p.getX(i), p.getY(i), p.getZ(i)));
+    }
+    const screenPos = new THREE.Vector3();
+    // 누른 화면 자리에서 가장 가까운 별을 찾는다(PICK_PX 밖이면 없음)
+    function findStarAt(clientX, clientY) {
+      let best = null;
+      let bestD = PICK_PX;
+      for (const star of pickableStars) {
+        screenPos.copy(star).applyMatrix4(sky.matrixWorld).project(camera);
+        if (screenPos.z > 1) continue;   // 카메라 뒤쪽 별
+        const sx = (screenPos.x + 1) / 2 * innerWidth;
+        const sy = (1 - screenPos.y) / 2 * innerHeight;
+        const d = Math.hypot(sx - clientX, sy - clientY);
+        if (d < bestD) {
+          bestD = d;
+          best = star;
+        }
+      }
+      return best;
+    }
+
+    // 별자리 하나: 하늘 묶음에 붙여서 별과 함께 천천히 돈다
+    function makeConstellation() {
+      const group = new THREE.Group();
+      const lineMat = new THREE.MeshBasicMaterial({ color: GOLD, transparent: true, fog: false, depthWrite: false });
+      const markMat = new THREE.PointsMaterial({
+        color: GOLD, size: 3.6, map: glowTex, transparent: true, fog: false,
+        depthWrite: false, blending: THREE.AdditiveBlending,
+      });
+      sky.add(group);
+      return { group, lineMat, markMat, stars: [], endAt: 0 };
+    }
+    function addMark(c, star) {
+      c.group.add(new THREE.Points(new THREE.BufferGeometry().setFromPoints([star]), c.markMat));
+    }
+    // 두 별 사이에 가는 금색 막대를 놓아 선을 긋는다
+    function addSegment(c, from, to) {
+      const dir = to.clone().sub(from);
+      const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, dir.length(), 6), c.lineMat);
+      bar.position.copy(from).add(to).multiplyScalar(0.5);
+      bar.quaternion.setFromUnitVectors(up, dir.normalize());
+      c.group.add(bar);
+    }
+    function removeConstellation(c) {
+      sky.remove(c.group);
+      c.group.traverse((o) => { if (o.geometry) o.geometry.dispose(); });
+      c.lineMat.dispose();
+      c.markMat.dispose();
+    }
+
+    let linking = false;      // 별자리 잇기 중인지
+    let current = null;       // 지금 잇고 있는 별자리
+    const finished = [];      // 다 이어서 사라지기를 기다리는 별자리
+    let nowT = 0;             // 반복에서 받은 지금 시각(초)
+
+    function updateLinkUi() {
+      linkBtn.textContent = linking ? '잇기 취소' : '별자리 잇기';
+      linkBtn.classList.toggle('on', linking);
+      hintEl.textContent = linking
+        ? '하늘의 별을 차례로 누르세요 (' + current.stars.length + '/' + LINK_COUNT + ')'
+        : HINT_WALK;
+    }
+    function startLinking() {
+      linking = true;
+      current = makeConstellation();
+      updateLinkUi();
+    }
+    function cancelLinking() {
+      removeConstellation(current);
+      current = null;
+      linking = false;
+      updateLinkUi();
+    }
+    function finishLinking() {
+      current.endAt = nowT + LINK_LIFE;
+      finished.push(current);
+      current = null;
+      linking = false;
+      todayCount += 1;
+      saveTodayCount(todayCount);
+      showCount();
+      playBell();
+      updateLinkUi();
+    }
+    // 잇기 중에 화면을 누르면 별을 고른다
+    function pickStar(clientX, clientY) {
+      const star = findStarAt(clientX, clientY);
+      if (!star) return;
+      const stars = current.stars;
+      const last = stars[stars.length - 1];
+      if (star === last) return;   // 같은 별을 연달아 누르면 무시
+      if (last) addSegment(current, last, star);
+      addMark(current, star);
+      stars.push(star);
+      if (stars.length === LINK_COUNT) finishLinking();
+      else updateLinkUi();
+    }
+    linkBtn.addEventListener('click', () => (linking ? cancelLinking() : startLinking()));
+
+    // 완성한 별자리는 10초 동안 보이고, 마지막 2초 동안 흐려지며 사라진다
+    function updateLinks(t) {
+      nowT = t;
+      for (let i = finished.length - 1; i >= 0; i--) {
+        const c = finished[i];
+        const left = c.endAt - t;
+        if (left <= 0) {
+          removeConstellation(c);
+          finished.splice(i, 1);
+          continue;
+        }
+        const opacity = Math.min(1, left / LINK_FADE);
+        c.lineMat.opacity = opacity;
+        c.markMat.opacity = opacity;
+      }
+    }
+
+    // ---------- 소리 (Web Audio, 소리 파일 없음) ----------
+    const soundBtn = document.getElementById('soundBtn');
+    let audio = null;     // 처음 버튼을 누를 때 만든다
+    let soundOn = false;
+
+    function makeNoise(ctx, seconds) {
+      const buf = ctx.createBuffer(1, ctx.sampleRate * seconds, ctx.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      return buf;
+    }
+
+    // 밤바람: 잡음에서 낮은 소리만 남기고, 세기와 높이를 천천히 흔든다
+    function startWind(ctx, out) {
+      const noise = ctx.createBufferSource();
+      noise.buffer = makeNoise(ctx, 4);
+      noise.loop = true;
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = 420;
+      lp.Q.value = 0.8;
+      const gain = ctx.createGain();
+      gain.gain.value = 0.16;
+      const swell = ctx.createOscillator();     // 세기: 약 11초에 한 번 커졌다 작아진다
+      swell.frequency.value = 0.09;
+      const swellDepth = ctx.createGain();
+      swellDepth.gain.value = 0.1;
+      swell.connect(swellDepth).connect(gain.gain);
+      const sweep = ctx.createOscillator();     // 높이: 약 20초에 한 번 오르내린다
+      sweep.frequency.value = 0.05;
+      const sweepDepth = ctx.createGain();
+      sweepDepth.gain.value = 220;
+      sweep.connect(sweepDepth).connect(lp.frequency);
+      noise.connect(lp).connect(gain).connect(out);
+      noise.start();
+      swell.start();
+      sweep.start();
+    }
+
+    // 풀벌레: 높은 음을 빠르게 끊어 "찌르르" 소리를 낸다. 마리마다 높이·박자·자리가 다르다
+    const CRICKETS = [
+      { freq: 4400, vol: 0.05, pan: -0.6, pulses: 3, gap: 0.42 },
+      { freq: 4900, vol: 0.035, pan: 0.5, pulses: 4, gap: 0.55 },
+      { freq: 5600, vol: 0.025, pan: 0.1, pulses: 12, gap: 1.6 },   // 길게 우는 먼 벌레
+    ];
+    const PULSE_STEP = 0.03;   // 한 번 "찌" 하는 간격(초)
+    function startCricket(ctx, out, c) {
+      const osc = ctx.createOscillator();
+      osc.frequency.value = c.freq;
+      const env = ctx.createGain();
+      env.gain.value = 0;
+      const pan = ctx.createStereoPanner();
+      pan.pan.value = c.pan;
+      osc.connect(env).connect(pan).connect(out);
+      osc.start();
+      let next = ctx.currentTime + 0.2 + Math.random();
+      // 0.5초마다 앞으로 1.5초 안에 울 소리를 미리 적어 둔다(소리를 끄면 시간이 멈춰 더 적지 않는다)
+      function scheduleChirps() {
+        if (next < ctx.currentTime) next = ctx.currentTime + 0.05;
+        while (next < ctx.currentTime + 1.5) {
+          if (Math.random() < 0.12) {
+            next += 1 + Math.random() * 2;   // 가끔 쉰다
+            continue;
+          }
+          for (let i = 0; i < c.pulses; i++) {
+            const t = next + i * PULSE_STEP;
+            env.gain.setValueAtTime(0, t);
+            env.gain.linearRampToValueAtTime(c.vol, t + 0.004);
+            env.gain.linearRampToValueAtTime(0, t + 0.02);
+          }
+          next += c.pulses * PULSE_STEP + c.gap * (0.85 + Math.random() * 0.3);
+        }
+        setTimeout(scheduleChirps, 500);
+      }
+      scheduleChirps();
+    }
+
+    // 맑은 종소리: 배음 셋을 겹쳐 울리고 천천히 잦아들게 한다(소리가 꺼져 있으면 울리지 않는다)
+    const BELL_BASE = 1046.5;   // 높은 도
+    const BELL_PARTIALS = [
+      { ratio: 1, vol: 0.22, len: 2.8 },
+      { ratio: 2.76, vol: 0.09, len: 1.6 },
+      { ratio: 5.4, vol: 0.04, len: 0.8 },
+    ];
+    function playBell() {
+      if (!audio || !soundOn) return;
+      const { ctx, master } = audio;
+      const now = ctx.currentTime;
+      for (const p of BELL_PARTIALS) {
+        const osc = ctx.createOscillator();
+        osc.frequency.value = BELL_BASE * p.ratio;
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0.0001, now);
+        g.gain.exponentialRampToValueAtTime(p.vol, now + 0.006);
+        g.gain.exponentialRampToValueAtTime(0.0001, now + p.len);
+        osc.connect(g).connect(master);
+        osc.start(now);
+        osc.stop(now + p.len + 0.05);
+      }
+    }
+
+    function startAudio() {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const master = ctx.createGain();
+      master.gain.value = 0.7;
+      master.connect(ctx.destination);
+      startWind(ctx, master);
+      for (const c of CRICKETS) startCricket(ctx, master, c);
+      return { ctx, master };
+    }
+
+    // 소리 켜기 버튼: 처음에는 무음, 누르면 켜지고 다시 누르면 꺼진다
+    soundBtn.addEventListener('click', async () => {
+      if (!audio) audio = startAudio();
+      soundOn = !soundOn;
+      if (soundOn) await audio.ctx.resume();
+      else await audio.ctx.suspend();
+      soundBtn.textContent = soundOn ? '소리 끄기' : '소리 켜기';
+    });
+
+    // ---------- 반복 ----------
+    const clock = new THREE.Clock();
+    function animate() {
+      const dt = Math.min(clock.getDelta(), 0.1);
+      const t = clock.elapsedTime;
+      updateMe(dt);
+      updateCamera(dt);
+      updateStars(t);
+      updateLinks(t);
+      renderer.render(scene, camera);
+      requestAnimationFrame(animate);
+    }
+    camera.position.set(0, CAM_UP, 5 + CAM_BACK);
+    animate();
+
+    addEventListener('resize', () => {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+    });
+  </script>
+</body>
+</html>
