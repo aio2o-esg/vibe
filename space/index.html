@@ -390,7 +390,8 @@
     scene.add(me);
 
     // ---------- 걷기 ----------
-    const SPEED = 4;      // 1초에 걷는 거리
+    const SPEED = 2;      // 1초에 걷는 거리(천천히)
+    const CLICK_STEP = 8; // 한 번 눌러서 걷는 가장 먼 거리
     const WALK_R = 35;    // 걸을 수 있는 바깥 끝
     const FIRE_R = 1.7;   // 모닥불 돌 둘레, 이 안으로는 못 들어간다
     const MOVE_KEYS = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowLeft', 'ArrowDown', 'ArrowRight'];
@@ -430,7 +431,7 @@
       if (hit) {
         target = hit.point.clone();
       } else {
-        // 하늘처럼 바닥이 아닌 곳을 누르면 그 방향으로 캠핑장 끝까지 걷는다
+        // 하늘처럼 바닥이 아닌 곳을 누르면 그 방향으로 걷는다(거리는 아래에서 CLICK_STEP으로 줄인다)
         const dir = raycaster.ray.direction;
         const len = Math.hypot(dir.x, dir.z);
         if (len < 0.001) return;
@@ -439,6 +440,14 @@
         const c = me.position.x * me.position.x + me.position.z * me.position.z - WALK_R * WALK_R;
         const far = -b + Math.sqrt(Math.max(0, b * b - c));
         target = new THREE.Vector3(me.position.x + dx * far, 0, me.position.z + dz * far);
+      }
+      // 한 번 누르면 그 방향으로 CLICK_STEP까지만 걷는다
+      const vx = target.x - me.position.x;
+      const vz = target.z - me.position.z;
+      const dist = Math.hypot(vx, vz);
+      if (dist > CLICK_STEP) {
+        target.x = me.position.x + vx / dist * CLICK_STEP;
+        target.z = me.position.z + vz / dist * CLICK_STEP;
       }
       keepInWalkArea(target);
     }
@@ -494,17 +503,21 @@
 
     // ---------- 카메라 ----------
     const CAM_BACK = 8, CAM_UP = 4.5;
-    const toFire = new THREE.Vector3();
+    const CAM_TURN = 0.6;   // 카메라가 도는 가장 빠른 속도(1초에 약 35도), 어지럽지 않게 천천히
+    let camYaw = 0;         // 망원경에서 본 카메라 쪽 방향(처음에는 +z 쪽)
     const camWant = new THREE.Vector3();
     function updateCamera(dt) {
-      // 인형 뒤(불 반대편)에 카메라를 두어 불이 늘 화면에 들어오게 한다
-      toFire.set(-me.position.x, 0, -me.position.z).normalize();
+      // 인형 뒤(망원경 반대편)에 카메라를 두어 망원경이 늘 화면에 들어오게 하되, 방향은 천천히 따라 돈다
+      const wantYaw = Math.atan2(me.position.x, me.position.z);
+      const diff = Math.atan2(Math.sin(wantYaw - camYaw), Math.cos(wantYaw - camYaw));   // -π~π 사이 차이
+      const maxTurn = CAM_TURN * dt;
+      camYaw += Math.max(-maxTurn, Math.min(maxTurn, diff * (1 - Math.exp(-2.5 * dt))));
       camWant.set(
-        me.position.x - toFire.x * CAM_BACK,
+        me.position.x + Math.sin(camYaw) * CAM_BACK,
         CAM_UP,
-        me.position.z - toFire.z * CAM_BACK
+        me.position.z + Math.cos(camYaw) * CAM_BACK
       );
-      camera.position.lerp(camWant, 1 - Math.exp(-5 * dt));
+      camera.position.lerp(camWant, 1 - Math.exp(-3 * dt));
       camera.lookAt(me.position.x, 1.2, me.position.z);
     }
 
