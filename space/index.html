@@ -29,6 +29,10 @@
     #zoomBox #zoomAll { font: 13px sans-serif; }
     #missionBtn { position: fixed; left: 12px; top: 50%; transform: translateY(-50%); display: none; padding: 8px 12px; font: 13px sans-serif; color: #2a1d05; background: #ffe9a8; border: 0; border-radius: 16px; cursor: pointer; }
     body.scope #missionBtn { display: block; }
+    .turnBtn { position: fixed; bottom: 26px; width: 46px; height: 46px; border-radius: 23px; font: 22px sans-serif; color: #dfe6ff; background: rgba(30, 36, 80, 0.85); border: 1px solid #7f8fe0; cursor: pointer; }
+    #turnLeft { left: 12px; }
+    #turnRight { right: 12px; }
+    body.scope .turnBtn { display: none; }
     #hint.mission { color: #ffe9a8; font: 700 15px sans-serif; opacity: 1; }
     body.scope #eyepiece { display: block; }
     body.scope #labelLayer { display: block; }
@@ -54,6 +58,8 @@
   <button id="photoBtn" type="button">사진 저장</button>
   <button id="scopeBtn" type="button">망원경 보기</button>
   <button id="missionBtn" type="button">별자리 찾기</button>
+  <button id="turnLeft" class="turnBtn" type="button" aria-label="화면 왼쪽으로 돌리기">↺</button>
+  <button id="turnRight" class="turnBtn" type="button" aria-label="화면 오른쪽으로 돌리기">↻</button>
   <div id="zoomBox">
     <button id="zoomIn" type="button" aria-label="확대">+</button>
     <span id="zoomLabel">×2</span>
@@ -570,15 +576,24 @@
 
     // ---------- 카메라 ----------
     const CAM_BACK = 8, CAM_UP = 4.5;
-    const CAM_TURN = 0.6;   // 카메라가 도는 가장 빠른 속도(1초에 약 35도), 어지럽지 않게 천천히
-    let camYaw = 0;         // 망원경에서 본 카메라 쪽 방향(처음에는 +z 쪽)
+    const CAM_STEP = Math.PI / 4;   // 버튼·Q/E 한 번에 도는 각도(45도)
+    let camYaw = 0;         // 인형에서 본 카메라 쪽 방향(처음에는 +z 쪽, 화면 위쪽이 북쪽)
+    let camYawTarget = 0;   // 사용자가 돌린 목표 방향. 카메라는 스스로 돌지 않고 이 값만 따른다
     const camWant = new THREE.Vector3();
+    // 화면 돌리기: 사용자가 누를 때만 45도씩 돈다(+1 왼쪽, -1 오른쪽)
+    function turnCamera(dir) {
+      camYawTarget += dir * CAM_STEP;
+    }
+    document.getElementById('turnLeft').addEventListener('click', () => turnCamera(1));
+    document.getElementById('turnRight').addEventListener('click', () => turnCamera(-1));
+    addEventListener('keydown', (e) => {
+      if (scopeOn || e.repeat) return;
+      if (e.code === 'KeyQ') turnCamera(1);
+      if (e.code === 'KeyE') turnCamera(-1);
+    });
     function updateCamera(dt) {
-      // 인형 뒤(망원경 반대편)에 카메라를 두어 망원경이 늘 화면에 들어오게 하되, 방향은 천천히 따라 돈다
-      const wantYaw = Math.atan2(me.position.x, me.position.z);
-      const diff = Math.atan2(Math.sin(wantYaw - camYaw), Math.cos(wantYaw - camYaw));   // -π~π 사이 차이
-      const maxTurn = CAM_TURN * dt;
-      camYaw += Math.max(-maxTurn, Math.min(maxTurn, diff * (1 - Math.exp(-2.5 * dt))));
+      // 카메라는 방향을 바꾸지 않고 인형 뒤를 따라 미끄러지듯 움직인다. 돌린 때만 그쪽으로 부드럽게 돈다
+      camYaw += (camYawTarget - camYaw) * (1 - Math.exp(-6 * dt));
       camWant.set(
         me.position.x + Math.sin(camYaw) * CAM_BACK,
         CAM_UP,
@@ -1609,6 +1624,7 @@
       me.position.set(Math.sin(a) * 5, 0, Math.cos(a) * 5);
       me.rotation.y = a + Math.PI;   // 망원경 쪽을 본다
       camYaw = a;
+      camYawTarget = a;
       camera.position.set(me.position.x + Math.sin(a) * CAM_BACK, CAM_UP, me.position.z + Math.cos(a) * CAM_BACK);
       spawnPos.copy(me.position);
     }
