@@ -21,9 +21,15 @@
     #labelLayer { position: fixed; left: 0; top: 0; width: 100%; height: 100%; display: none; pointer-events: none; }
     #infoCard { position: fixed; left: 50%; bottom: 140px; transform: translateX(-50%); display: none; width: max-content; max-width: min(86vw, 340px); padding: 10px 16px; font: 14px/1.45 sans-serif; color: #e8ecff; text-align: center; background: rgba(10, 14, 40, 0.85); border: 1px solid rgba(191, 208, 255, 0.5); border-radius: 14px; pointer-events: none; }
     #infoTitle { font: 700 17px sans-serif; color: #fff3c4; margin-bottom: 2px; }
-    #people { position: fixed; left: 0; right: 0; top: 58px; text-align: center; color: #cfd6ff; font: 13px sans-serif; opacity: 0.85; pointer-events: none; }
-    #toast { position: fixed; left: 50%; top: 104px; transform: translateX(-50%); display: none; padding: 6px 14px; font: 14px sans-serif; color: #fff3c4; background: rgba(10, 14, 40, 0.8); border-radius: 14px; pointer-events: none; white-space: nowrap; }
+    #people { position: fixed; left: 50%; top: 60px; transform: translateX(-50%); width: max-content; max-width: calc(100% - 240px); text-align: center; color: #cfd6ff; font: 13px/1.3 sans-serif; opacity: 0.85; pointer-events: none; }
+    #timeBox { position: fixed; left: 12px; top: 104px; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+    #skyClock { font: 13px sans-serif; color: #cfd6ff; opacity: 0.9; padding-left: 2px; }
+    #timeBox button { padding: 5px 10px; font: 12px sans-serif; color: #cfd6ff; background: rgba(30, 36, 80, 0.8); border: 1px solid #5560a8; border-radius: 14px; cursor: pointer; }
+    #toast { position: fixed; left: 50%; top: 196px; transform: translateX(-50%); display: none; padding: 6px 14px; font: 14px sans-serif; color: #fff3c4; background: rgba(10, 14, 40, 0.8); border-radius: 14px; pointer-events: none; white-space: nowrap; }
     #zoomBox #zoomAll { font: 13px sans-serif; }
+    #missionBtn { position: fixed; left: 12px; top: 50%; transform: translateY(-50%); display: none; padding: 8px 12px; font: 13px sans-serif; color: #2a1d05; background: #ffe9a8; border: 0; border-radius: 16px; cursor: pointer; }
+    body.scope #missionBtn { display: block; }
+    #hint.mission { color: #ffe9a8; font: 700 15px sans-serif; opacity: 1; }
     body.scope #eyepiece { display: block; }
     body.scope #labelLayer { display: block; }
     body.scope #zoomBox { display: flex; }
@@ -38,10 +44,16 @@
   <div id="count">오늘 만든 별자리 0개</div>
   <div id="people">혼자 보는 중</div>
   <div id="toast"></div>
+  <div id="timeBox">
+    <div id="skyClock">하늘 11.25 21:00</div>
+    <button id="speedBtn" type="button">▶ 실제 속도</button>
+    <button id="nowBtn" type="button">지금 하늘</button>
+  </div>
   <button id="linkBtn" type="button">별자리 잇기</button>
   <button id="soundBtn" type="button">소리 켜기</button>
   <button id="photoBtn" type="button">사진 저장</button>
   <button id="scopeBtn" type="button">망원경 보기</button>
+  <button id="missionBtn" type="button">별자리 찾기</button>
   <div id="zoomBox">
     <button id="zoomIn" type="button" aria-label="확대">+</button>
     <span id="zoomLabel">×2</span>
@@ -301,7 +313,7 @@
     // 관측 자리와 시각: 2026년 11월 25일 밤 9시(한국 시각), 제주(북위 33.4도, 동경 126.5도)
     const OBS_LAT = 33.4 * Math.PI / 180;
     const START_LST = 11.1 * Math.PI / 180;      // 그 시각의 지방 항성시(약 0시 44분)
-    const SIDEREAL_RATE = 2 * Math.PI / 86164;   // 하늘이 1초에 도는 각도(실제 속도)
+    const OBS_LON_DEG = 126.53;                  // 제주 동경(도)
     // 하늘의 북극 방향: 북쪽(-z)에서 위도만큼 들려 있다. 하늘은 이 축을 중심으로 돈다
     const POLE_AXIS = new THREE.Vector3(0, Math.sin(OBS_LAT), -Math.cos(OBS_LAT));
 
@@ -398,7 +410,7 @@
 
     // 하늘은 북극 축을 중심으로 실제 속도로 돌고, 밝은 별은 서로 다른 박자로 반짝인다
     function updateStars(t) {
-      sky.quaternion.setFromAxisAngle(POLE_AXIS, -SIDEREAL_RATE * t);
+      sky.quaternion.setFromAxisAngle(POLE_AXIS, -getSkyAngle());   // 하늘 시각만큼 돈다(아래 '하늘 시각' 부분)
       starLayers[0].material.opacity = 0.88 + Math.sin(t * 2.6 + 1) * 0.12;
       starLayers[1].material.opacity = 0.86 + Math.sin(t * 1.7) * 0.12;
     }
@@ -587,30 +599,31 @@
     const hintEl = document.getElementById('hint');
     const HINT_WALK = hintEl.textContent;
 
-    // 오늘 만든 별자리 수: 날짜마다 따로 브라우저에 저장한다
-    function getTodayKey() {
+    // 오늘 만든 별자리 수·찾은 별자리 수: 날짜마다 따로 브라우저에 저장한다(kind: constellations, found)
+    function getTodayKey(kind = 'constellations') {
       const d = new Date();
-      return 'space-constellations-' + d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate();
+      return 'space-' + kind + '-' + d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate();
     }
-    function loadTodayCount() {
+    function loadTodayCount(kind) {
       try {
-        return parseInt(localStorage.getItem(getTodayKey()) || '0', 10) || 0;
+        return parseInt(localStorage.getItem(getTodayKey(kind)) || '0', 10) || 0;
       } catch (e) {
-        console.warn('오늘 만든 별자리 수를 읽지 못했습니다.', e);
+        console.warn('오늘 별자리 수를 읽지 못했습니다.', e);
         return 0;
       }
     }
-    function saveTodayCount(n) {
+    function saveTodayCount(n, kind) {
       try {
-        localStorage.setItem(getTodayKey(), String(n));
+        localStorage.setItem(getTodayKey(kind), String(n));
       } catch (e) {
-        console.warn('오늘 만든 별자리 수를 저장하지 못했습니다.', e);
+        console.warn('오늘 별자리 수를 저장하지 못했습니다.', e);
       }
     }
     // 저장소를 못 쓰는 브라우저에서도 열려 있는 동안은 숫자가 오르도록 메모리에도 둔다
     let todayCount = loadTodayCount();
+    let foundCount = loadTodayCount('found');   // 별자리 찾기 미션에서 오늘 찾은 수
     function showCount() {
-      countEl.textContent = '오늘 만든 별자리 ' + todayCount + '개';
+      countEl.textContent = '오늘 만든 별자리 ' + todayCount + '개' + (foundCount ? ' · 찾은 별자리 ' + foundCount + '개' : '');
     }
     showCount();
 
@@ -670,9 +683,11 @@
     function updateLinkUi() {
       linkBtn.textContent = linking ? '잇기 취소' : '별자리 잇기';
       linkBtn.classList.toggle('on', linking);
+      const missionShown = !linking && scopeOn && mission;
       hintEl.textContent = linking
         ? '하늘의 별을 차례로 누르세요 (' + current.stars.length + '/' + LINK_COUNT + ')'
-        : (scopeOn ? HINT_SCOPE : HINT_WALK);
+        : (missionShown ? mission.text : (scopeOn ? HINT_SCOPE : HINT_WALK));
+      hintEl.classList.toggle('mission', Boolean(missionShown));
     }
     function startLinking() {
       linking = true;
@@ -815,6 +830,101 @@
       ['마르카브', 346.19, 15.21, 'Peg', '가을의 대사각형 한 귀퉁이 별'],
     ].map(([ko, ra, dec, con, text]) => ({ ko, con, text, pos: getSkyDir(ra, dec).multiplyScalar(STAR_R) }));
 
+    // 성운·은하·성단(VESPERA 같은 스마트 망원경으로 찍는 천체): 망원경 화면에서만 흐릿한 빛 모양으로 보인다
+    // [한글 이름, 번호, 적경(도), 적위(도), 크기(도), 모양, 기울기(도), 색, 설명]
+    // 아주 작은 천체(M57·M27·M1)는 보기 쉽게 실제보다 크게 그렸다
+    const DEEP_SKY = [
+      ['안드로메다은하', 'M31', 10.68, 41.27, 3.0, 'galaxy', 35, '#cfd8ff', '약 250만 광년 떨어진 이웃 은하, 맨눈으로도 희미하게 보여요'],
+      ['삼각형자리은하', 'M33', 23.46, 30.66, 1.0, 'galaxy', 23, '#c8d4ff', '약 270만 광년 떨어진 나선은하'],
+      ['플레이아데스 성단(좀생이별)', 'M45', 56.75, 24.12, 1.8, 'cluster', 0, '#9fc2ff', '약 440광년 떨어진 젊은 별 무리, 푸른 기운이 감싸요'],
+      ['오리온 대성운', 'M42', 83.82, -5.39, 1.1, 'nebula', 0, '#ff9fc7', '약 1,300광년 떨어진, 별이 태어나는 가스 구름'],
+      ['이중성단', 'h·χ Per', 35.0, 57.14, 1.2, 'double', 0, '#dfe8ff', '페르세우스자리의 나란한 두 별 무리, 약 7,500광년'],
+      ['헤라클레스 구상성단', 'M13', 250.42, 36.46, 0.35, 'globular', 0, '#fff2d6', '수십만 개 별이 공처럼 모인 무리, 약 2만 2천 광년'],
+      ['고리성운', 'M57', 283.40, 33.03, 0.15, 'ring', 0, '#9fe7d4', '죽어 가는 별이 내뿜은 가스 고리, 약 2,300광년'],
+      ['아령성운', 'M27', 299.90, 22.72, 0.3, 'nebula', 30, '#a8e6ff', '아령 모양의 행성상성운, 약 1,300광년'],
+      ['게성운', 'M1', 83.63, 22.01, 0.12, 'nebula', 45, '#ffc59f', '1054년에 터진 초신성의 잔해, 약 6,500광년'],
+      ['프레세페 성단(벌집)', 'M44', 130.10, 19.67, 1.5, 'cluster', 0, '#fff4e8', '게자리 한가운데 벌집처럼 모인 별 무리, 약 600광년'],
+      ['석호성운', 'M8', 270.90, -24.38, 1.2, 'nebula', 20, '#ff9fb4', '궁수자리의 붉은 가스 구름, 약 4,000광년'],
+    ];
+    // 모양별 빛 무늬를 코드로 그린다(이미지 파일 없음)
+    function makeDeepSkyTexture(shape, angleDeg, color) {
+      const S = 256;
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = S;
+      const g = canvas.getContext('2d');
+      const c = S / 2;
+      const glow = (x, y, r, inner, outer) => {
+        const grad = g.createRadialGradient(x, y, 0, x, y, r);
+        grad.addColorStop(0, inner);
+        grad.addColorStop(1, outer);
+        g.fillStyle = grad;
+        g.beginPath();
+        g.arc(x, y, r, 0, Math.PI * 2);
+        g.fill();
+      };
+      const dots = (cx, cy, spread, count, size) => {
+        g.fillStyle = '#ffffff';
+        for (let i = 0; i < count; i++) {
+          const a = makeRandom() * Math.PI * 2;
+          const r = Math.pow(makeRandom(), 1.6) * spread;
+          g.globalAlpha = 0.5 + makeRandom() * 0.5;
+          g.beginPath();
+          g.arc(cx + Math.cos(a) * r, cy + Math.sin(a) * r, size * (0.6 + makeRandom()), 0, Math.PI * 2);
+          g.fill();
+        }
+        g.globalAlpha = 1;
+      };
+      g.globalCompositeOperation = 'lighter';
+      if (shape === 'galaxy') {
+        g.translate(c, c);
+        g.rotate(angleDeg * Math.PI / 180);
+        g.scale(1, 0.32);
+        glow(0, 0, c * 0.95, color + 'aa', color + '00');
+        glow(0, 0, c * 0.35, '#fff6e0ee', '#fff6e000');
+      } else if (shape === 'nebula') {
+        for (let i = 0; i < 7; i++) {
+          const x = c + (makeRandom() - 0.5) * c * 0.7;
+          const y = c + (makeRandom() - 0.5) * c * 0.7;
+          glow(x, y, c * (0.35 + makeRandom() * 0.35), color + '66', color + '00');
+        }
+        glow(c, c, c * 0.25, '#ffffffaa', '#ffffff00');
+      } else if (shape === 'ring') {
+        const grad = g.createRadialGradient(c, c, c * 0.25, c, c, c * 0.8);
+        grad.addColorStop(0, color + '00');
+        grad.addColorStop(0.45, color + 'ee');
+        grad.addColorStop(1, color + '00');
+        g.fillStyle = grad;
+        g.fillRect(0, 0, S, S);
+      } else if (shape === 'globular') {
+        glow(c, c, c * 0.8, color + '99', color + '00');
+        dots(c, c, c * 0.6, 120, 1.6);
+      } else if (shape === 'double') {
+        glow(c * 0.62, c, c * 0.45, color + '55', color + '00');
+        glow(c * 1.38, c, c * 0.45, color + '55', color + '00');
+        dots(c * 0.62, c, c * 0.35, 30, 2.4);
+        dots(c * 1.38, c, c * 0.35, 30, 2.4);
+      } else {
+        glow(c, c, c * 0.9, color + '55', color + '00');
+        dots(c, c, c * 0.7, 26, 3);
+      }
+      return new THREE.CanvasTexture(canvas);
+    }
+    const deepSkyGroup = new THREE.Group();
+    deepSkyGroup.visible = false;   // 망원경 화면에서만
+    const deepSky = DEEP_SKY.map(([ko, code, ra, dec, size, shape, angle, color, text]) => {
+      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: makeDeepSkyTexture(shape, angle, color), transparent: true, depthWrite: false,
+        blending: THREE.AdditiveBlending, fog: false, opacity: 0.5,
+      }));
+      const pos = getSkyDir(ra, dec).multiplyScalar(STAR_R * 0.985);
+      sprite.position.copy(pos);
+      const s = size * Math.PI / 180 * STAR_R * 1.25;
+      sprite.scale.set(s, s, 1);
+      deepSkyGroup.add(sprite);
+      return { ko, code, size, text, pos, sprite };
+    });
+    sky.add(deepSkyGroup);
+
     // 별자리 선: 하늘에 붙여 두고 망원경 화면에서만 은은하게 보인다
     const constellations = window.SKY_DATA.constellations.map((c) => {
       const pos = [];
@@ -953,6 +1063,19 @@
         done.add(c.ko);
         labelCtx.fillText(c.ko, labelPos.x, labelPos.y);
       }
+      // 조금 확대하면(×2부터) 성운·은하 이름도 옅은 초록으로 쓴다
+      if (scopeDiam > SCOPE_FOVS[2]) return;
+      labelCtx.fillStyle = 'rgba(170, 235, 205, 0.85)';
+      for (const o of deepSky) {
+        if (!getScreenPoint(o.pos, labelPos)) continue;
+        if (Math.hypot(labelPos.x - cx, labelPos.y - cy) > inside) continue;
+        const y = labelPos.y + 16;
+        const half = labelCtx.measureText(o.ko).width / 2 + 4;
+        const box = [labelPos.x - half, y - 10, labelPos.x + half, y + 10];
+        if (placed.some((b) => b[0] < box[2] && box[0] < b[2] && b[1] < box[3] && box[1] < b[3])) continue;
+        placed.push(box);
+        labelCtx.fillText(o.ko, labelPos.x, y);
+      }
     }
     function clearConstellationLabels() {
       labelCtx.setTransform(1, 0, 0, 1, 0, 0);
@@ -989,12 +1112,33 @@
       return best;
     }
 
+    // 누른 곳에 있는 성운·은하(화면에 보이는 크기 안이거나 22px 안)
+    function findDeepSkyAt(clientX, clientY) {
+      let best = null;
+      let bestD = Infinity;
+      for (const o of deepSky) {
+        if (!getScreenPoint(o.pos, labelPos)) continue;
+        const d = Math.hypot(labelPos.x - clientX, labelPos.y - clientY);
+        const pxRadius = (o.size / 2) / camera.fov * innerHeight;
+        if (d <= Math.max(22, pxRadius) && d < bestD) {
+          bestD = d;
+          best = o;
+        }
+      }
+      return best;
+    }
+
     // ---- 별자리로 날아가기: 가운데로 돌고, 별자리가 둥근 시야에 꽉 차게 확대한다 ----
     const flyDir = new THREE.Vector3();
     function flyToConstellation(c) {
       flyDir.copy(c.center).applyMatrix4(sky.matrixWorld).normalize();
       const fitDiam = c.radius * 2 * 1.35 * 180 / Math.PI;
       flyTo(Math.atan2(flyDir.x, -flyDir.z), Math.asin(flyDir.y), fitDiam);
+    }
+    // 성운·은하는 크기의 약 4배 시야로 날아가 크게 본다
+    function flyToDeepSky(o) {
+      flyDir.copy(o.pos).applyMatrix4(sky.matrixWorld).normalize();
+      flyTo(Math.atan2(flyDir.x, -flyDir.z), Math.asin(flyDir.y), Math.max(SCOPE_FOVS[SCOPE_FOVS.length - 1], o.size * 4));
     }
     // 정한 방위·고도로 부드럽게 돌고, 둥근 시야 지름(도)을 맞춘다(함께 있는 사람 따라 보기에도 쓴다)
     function flyTo(toAz, toAlt, diam) {
@@ -1046,6 +1190,8 @@
         starLayers[k].material.size = l.size * (1 + 0.45 * gain);
         starLayers[k].material.opacity = Math.min(1, l.opacity + 0.2 * gain);
       });
+      // 성운·은하는 넓게 볼 땐 희미하고, 확대할수록 또렷해진다
+      for (const o of deepSky) o.sprite.material.opacity = 0.35 + 0.65 * Math.min(1, zoomK * 2);
     }
     // 세로 화면에서도 둥근 시야의 지름이 정한 시야각(도)이 되도록 세로 시야각을 맞춘다
     function getScopeFov(diamDeg) {
@@ -1085,6 +1231,7 @@
       fly = null;
       setZoom(0);   // 처음에는 넓게 보며 별자리 이름을 한눈에
       showConstellationLines(true);
+      deepSkyGroup.visible = true;
       document.body.classList.add('scope');
       scopeBtn.textContent = '망원경에서 나오기';
       aimScopeCamera();
@@ -1103,6 +1250,8 @@
       hideInfoCard();
       clearConstellationLabels();
       showConstellationLines(false);
+      deepSkyGroup.visible = false;
+      stopMission();
       camera.fov = WALK_FOV;
       camera.updateProjectionMatrix();
       document.body.classList.remove('scope');
@@ -1154,6 +1303,13 @@
         const home = constellations.find((k) => k.id === star.con);
         if (home) showConstellationName(home);
         showInfoCard(star.ko, star.text + (home ? ' · ' + home.ko : ''), home ? home.ko : null);
+        if (home) checkMission(home);   // 문제의 별자리에 속한 밝은 별을 눌러도 찾은 것으로 본다
+        return;
+      }
+      const object = findDeepSkyAt(e.clientX, e.clientY);
+      if (object) {
+        flyToDeepSky(object);
+        showInfoCard(object.ko + ' (' + object.code + ')', object.text, null);
         return;
       }
       const c = findConstellationAt(e.clientX, e.clientY);
@@ -1164,6 +1320,7 @@
       showConstellationName(c);
       flyToConstellation(c);
       showInfoCard(c.ko, CONSTELLATION_INFO[c.id] || '', c.ko);
+      checkMission(c);
     });
     renderer.domElement.addEventListener('pointercancel', () => { drag = null; });
     renderer.domElement.addEventListener('wheel', (e) => {
@@ -1386,12 +1543,14 @@
     let sparkleStart = -1;
     let toastUntil = 0;
 
+    // 휴대폰에서도 양옆 버튼과 겹치지 않게 짧게 쓴다(긴 방이름은 10자에서 줄임)
     function showPeople() {
-      const room = ROOM === 'lobby' ? '' : '#' + ROOM + ' 방 · ';
+      const name = ROOM.length > 10 ? ROOM.slice(0, 10) + '…' : ROOM;
+      const room = ROOM === 'lobby' ? '' : '#' + name + ' · ';
       const watching = [...peers.values()].filter((p) => p.seen && p.scope).length;
       peopleEl.textContent = peers.size === 0
         ? room + '혼자 보는 중'
-        : room + '지금 함께 있는 사람 ' + (peers.size + 1) + '명' + (watching ? ' · 망원경 보는 사람 ' + watching + '명' : '');
+        : room + '함께 ' + (peers.size + 1) + '명' + (watching ? ' · 망원경 ' + watching + '명' : '');
     }
     showPeople();
     function showToast(text) {
@@ -1566,6 +1725,103 @@
     }
     joinFamilyRoom();
 
+    // ---------- 별자리 찾기 미션 ----------
+    const missionBtn = document.getElementById('missionBtn');
+    const DIRECTIONS = ['북', '북동', '동', '남동', '남', '남서', '서', '북서'];
+    const MISSION_MIN_ALT = 15;   // 이 고도(도) 위에 떠 있는 별자리에서 문제를 낸다
+    let mission = null;           // 지금 문제 { ko, text }
+    const missionDir = new THREE.Vector3();
+    // 별자리 가운데가 지금 어느 방위·고도(도)에 있는지
+    function getSkyPlace(c) {
+      missionDir.copy(c.center).applyMatrix4(sky.matrixWorld).normalize();
+      let az = Math.atan2(missionDir.x, -missionDir.z) * 180 / Math.PI;
+      if (az < 0) az += 360;
+      return { az, alt: Math.asin(missionDir.y) * 180 / Math.PI };
+    }
+    // 설명이 있는 잘 알려진 별자리 중 지금 떠 있는 것을 골라, 방위·높이 힌트와 함께 문제를 낸다
+    function pickMission() {
+      const known = constellations.filter((c) => CONSTELLATION_INFO[c.id] && (!mission || c.ko !== mission.ko));
+      const up = known.filter((c) => getSkyPlace(c).alt >= MISSION_MIN_ALT);
+      const pool = up.length ? up : known;
+      const c = pool[Math.floor(Math.random() * pool.length)];
+      const { az, alt } = getSkyPlace(c);
+      const height = alt < 0 ? '지평선 아래' : alt < 25 ? '낮게' : alt < 55 ? '중간 높이' : '높이';
+      mission = { ko: c.ko, text: '찾아 보세요: ' + c.ko + ' · ' + DIRECTIONS[Math.round(az / 45) % 8] + '쪽 하늘 ' + height };
+      updateLinkUi();
+    }
+    function stopMission() {
+      mission = null;
+      missionBtn.textContent = '별자리 찾기';
+      updateLinkUi();
+    }
+    missionBtn.addEventListener('click', () => {
+      if (mission) {
+        stopMission();
+        return;
+      }
+      missionBtn.textContent = '찾기 그만';
+      pickMission();
+    });
+    // 문제의 별자리를 누르면 종소리·반짝임과 함께 도장을 찍고 다음 문제를 낸다
+    function checkMission(c) {
+      if (!mission || c.ko !== mission.ko) return;
+      foundCount += 1;
+      saveTodayCount(foundCount, 'found');
+      showCount();
+      playBell();
+      sparkleStart = nowT;
+      showToast('찾았어요! 오늘 찾은 별자리 ' + foundCount + '개');
+      pickMission();
+    }
+
+    // ---------- 하늘 시각 (빨리 감기 · 지금 하늘) ----------
+    const START_MS = Date.UTC(2026, 10, 25, 12, 0, 0);   // 2026년 11월 25일 밤 9시(한국 시각)
+    const J2000_MS = Date.UTC(2000, 0, 1, 12, 0, 0);
+    const TIME_SPEEDS = [1, 60, 600];                     // 실제 속도, 1초에 1분, 1초에 10분
+    const SPEED_LABELS = ['▶ 실제 속도', '▶▶ 1초=1분', '▶▶▶ 1초=10분'];
+    const skyClockEl = document.getElementById('skyClock');
+    const speedBtn = document.getElementById('speedBtn');
+    const nowBtn = document.getElementById('nowBtn');
+    let skyBaseMs = START_MS;   // 하늘 시각의 출발점
+    let skySimSec = 0;          // 출발점에서 흐른 하늘 시각(초)
+    let timeSpeedIndex = 0;
+    let showingNow = false;     // 지금 하늘을 보는 중인지
+    let clockText = '';
+    // 그 시각 제주의 지방 항성시(도, 0~360)
+    function getLstDeg(ms) {
+      const days = (ms - J2000_MS) / 86400000;
+      const deg = 280.46061837 + 360.98564736629 * days + OBS_LON_DEG;
+      return ((deg % 360) + 360) % 360;
+    }
+    // 별을 놓아 둔 시각(START_LST)에서 하늘 시각까지 하늘이 돈 각도
+    function getSkyAngle() {
+      return getLstDeg(skyBaseMs + skySimSec * 1000) * Math.PI / 180 - START_LST;
+    }
+    function showSkyClock() {
+      const d = new Date(skyBaseMs + skySimSec * 1000);
+      const two = (n) => String(n).padStart(2, '0');
+      const text = '하늘 ' + (d.getMonth() + 1) + '.' + d.getDate() + ' ' + two(d.getHours()) + ':' + two(d.getMinutes());
+      if (text === clockText) return;
+      clockText = text;
+      skyClockEl.textContent = text;
+    }
+    function updateSkyTime(dt) {
+      skySimSec += dt * TIME_SPEEDS[timeSpeedIndex];
+      showSkyClock();
+    }
+    speedBtn.addEventListener('click', () => {
+      timeSpeedIndex = (timeSpeedIndex + 1) % TIME_SPEEDS.length;
+      speedBtn.textContent = SPEED_LABELS[timeSpeedIndex];
+    });
+    // 지금 하늘(지금 이 순간 제주 하늘)과 11월 25일 밤 9시 하늘을 오간다
+    nowBtn.addEventListener('click', () => {
+      showingNow = !showingNow;
+      skyBaseMs = showingNow ? Date.now() : START_MS;
+      skySimSec = 0;
+      nowBtn.textContent = showingNow ? '11월 25일 밤' : '지금 하늘';
+      showSkyClock();
+    });
+
     // ---------- 반복 ----------
     const clock = new THREE.Clock();
     function animate() {
@@ -1578,6 +1834,7 @@
         updateCamera(dt);
       }
       updateScopeButton();
+      updateSkyTime(dt);
       updateStars(t);
       updateLinks(t);
       updatePeers(dt);
