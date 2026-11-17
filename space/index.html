@@ -1573,7 +1573,11 @@
     // 동적 import라서 불러오기에 실패해도 혼자 쓰는 화면은 그대로 동작한다
     const APP_ID = 'hoseo-vibe-observatory-aio2o-esg';
     const ROOM = decodeURIComponent(location.hash.slice(1)).trim().slice(0, 40) || 'lobby';   // 주소 끝 #방이름
-    const PEER_COLORS = [0x4fc3f7, 0x81c784, 0xba68c8, 0xffd54f, 0xf06292];   // 가족 5명이 겹치지 않는 색
+    // 나(주황) 말고 19명이 겹치지 않는 색: 모두 20명까지 서로 다른 색
+    const PEER_COLORS = [
+      0x4fc3f7, 0x81c784, 0xba68c8, 0xffd54f, 0xf06292, 0x26a69a, 0x5c6bc0, 0xeeeeee, 0x8d6e63, 0xaed581,
+      0x4dd0e1, 0x9575cd, 0xf48fb1, 0x1e88e5, 0x43a047, 0xfdd835, 0x78909c, 0xd81b60, 0x00897b,
+    ];
     const SEND_EVERY = 200;      // 내 위치를 보내는 간격(ms)
     const SPARKLE_TIME = 1.6;    // 남이 별자리를 만들면 하늘이 반짝이는 시간(초)
     const MARKER_PICK_PX = 26;   // 누른 곳에서 이 거리(px) 안의 동그라미를 고른다
