@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="하노이·다낭·호치민 연말 3박(2026.12.30~2027.1.4) 항공·숙소 비교와 도시별 일정, 맛집, 마사지, 택시 정보">
+<meta property="og:type" content="website">
+<meta property="og:title" content="베트남 연말 3박 비교">
+<meta property="og:description" content="하노이·다낭·호치민 항공·숙소 비교와 도시별 일정, 맛집, 마사지, 택시 정보">
+<meta property="og:locale" content="ko_KR">
+<meta name="twitter:card" content="summary">
+<title>베트남 연말 3박 비교</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@500;600;700&family=Noto+Sans+KR:wght@400;500;700&display=swap">
+<style>
+*,*::before,*::after{box-sizing:border-box} html,body{margin:0} img{max-width:100%}
+/* Layout: one reading column; summary cards up top, then one long section per city with a sticky city nav */
+:root{
+  --bg:#f3f6f5; --surface:#ffffff; --ink:#16201c; --muted:#5a6964; --line:#d7e0dc;
+  --jade:#1b6a55; --jade-soft:#e1efe9; --ochre:#9a640a; --ochre-soft:#f6ead2; --warn:#b1402c; --warn-soft:#f8e3de;
+  --f-display:"Be Vietnam Pro","Noto Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+  --f-body:"Noto Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+  --r:10px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0e1513; --surface:#16201d; --ink:#e3ebe7; --muted:#9aaaa4; --line:#2b3934;
+  --jade:#5cc0a2; --jade-soft:#16322a; --ochre:#e2b055; --ochre-soft:#33290f; --warn:#f0907a; --warn-soft:#3a1f19; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0e1513; --surface:#16201d; --ink:#e3ebe7; --muted:#9aaaa4; --line:#2b3934;
+  --jade:#5cc0a2; --jade-soft:#16322a; --ochre:#e2b055; --ochre-soft:#33290f; --warn:#f0907a; --warn-soft:#3a1f19; color-scheme:dark}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.65}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--surface)}
+.wrap{max-width:1040px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+header.top{padding-block:36px 20px}
+h1,h2,h3{font-family:var(--f-display);text-wrap:balance;line-height:1.25;margin:0}
+h1{font-size:clamp(26px,4.4vw,38px);font-weight:700;letter-spacing:-.01em}
+h2{font-size:clamp(21px,3vw,27px);font-weight:700}
+h3{font-size:16px;font-weight:700}
+p{margin:0}
+.lede{color:var(--muted);margin-top:10px;max-width:68ch}
+.eyebrow{font-family:var(--f-display);font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--jade)}
+.num{font-family:var(--f-display);font-variant-numeric:tabular-nums}
+.stack{display:flex;flex-direction:column;gap:14px}
+nav.citynav{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--surface);border-bottom:1px solid var(--line)}
+nav.citynav .wrap{display:flex;gap:6px;overflow-x:auto;padding-block:10px}
+nav.citynav a{flex:none;text-decoration:none;color:var(--ink);font-size:14px;font-weight:500;padding:6px 12px;border-radius:999px;border:1px solid var(--line)}
+nav.citynav a:hover,nav.citynav a:focus-visible{border-color:var(--jade);color:var(--jade);outline:none}
+section{padding-block:28px;border-bottom:1px solid var(--line)}
+.verdict{background:var(--jade-soft);border-radius:var(--r);padding:16px 18px;display:flex;flex-direction:column;gap:6px}
+.verdict strong{color:var(--jade)}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:14px;margin-top:16px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.card.best{border-color:var(--jade);box-shadow:0 0 0 1px var(--jade) inset}
+.card .head{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.card .total{font-size:24px;font-weight:700}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:14px}
+.kv dt{color:var(--muted)}
+.kv dd{margin:0;min-width:0}
+.chip{display:inline-block;font-size:12px;font-weight:600;padding:2px 9px;border-radius:999px;background:var(--ochre-soft);color:var(--ochre);white-space:nowrap}
+.chip.ok{background:var(--jade-soft);color:var(--jade)}
+.chip.no{background:var(--warn-soft);color:var(--warn)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.tablewrap{overflow-x:auto;margin-top:12px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface)}
+table{border-collapse:collapse;width:100%;min-width:600px;font-size:14px}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-weight:600;color:var(--muted);font-size:13px;background:var(--bg)}
+tr:last-child td{border-bottom:0}
+td.r{text-align:right;font-variant-numeric:tabular-nums}
+.note{font-size:13px;color:var(--muted)}
+.city-head{display:flex;flex-direction:column;gap:8px;margin-bottom:16px}
+.days{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:var(--r);background:var(--surface);overflow:hidden}
+.day{display:grid;grid-template-columns:118px 1fr;gap:14px;padding:12px 16px;border-bottom:1px solid var(--line)}
+.day:last-child{border-bottom:0}
+.day .d{font-family:var(--f-display);font-weight:600;font-size:14px;color:var(--jade)}
+.day .d small{display:block;color:var(--muted);font-weight:500;font-family:var(--f-body)}
+.day ul{margin:0;padding-left:18px;min-width:0}
+.day li+li{margin-top:2px}
+.fly{color:var(--ochre);font-weight:600}
+.info{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;margin-top:16px}
+.block{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;min-width:0}
+.block h3{margin-bottom:8px;color:var(--jade)}
+.block ul{margin:0;padding-left:18px}
+.block li+li{margin-top:6px}
+.block b{font-weight:600}
+.sources{font-size:13px;columns:2 300px;column-gap:24px}
+.sources li{break-inside:avoid;margin-bottom:4px}
+a{color:var(--jade)}
+footer{padding-block:24px 40px;color:var(--muted);font-size:13px}
+@media (max-width:520px){.day{grid-template-columns:1fr;gap:4px}}
+@media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
+</style>
+</head>
+<body>
+
+<header class="top wrap">
+  <p class="eyebrow">남 2명 · 1인 1실 · 2026.12.30 ~ 2027.1.4</p>
+  <h1>베트남 연말 3박 비교</h1>
+  <p class="lede">한국 출발은 12/30 저녁~12/31 아침, 인천 도착은 1/4(월) 새벽 5시 전 조건으로 하노이·다낭·호치민을 비교했습니다. 항공·숙소 가격은 2026년 11월 18일 Google 항공편·호텔 조회값입니다.</p>
+</header>
+
+<nav class="citynav" aria-label="도시 바로가기">
+  <div class="wrap">
+    <a href="#summary">비교</a>
+    <a href="#airline">대한항공·베트남항공</a>
+    <a href="#hanoi">하노이</a>
+    <a href="#danang">다낭</a>
+    <a href="#hcmc">호치민</a>
+    <a href="#tips">공통 팁</a>
+  </div>
+</nav>
+
+<main class="wrap">
+
+<section id="summary">
+  <div class="verdict">
+    <p><strong>결론: 하노이가 가장 싸고 일정도 가장 잘 맞습니다.</strong></p>
+    <p>저비용 항공사 왕복 표 1장으로 12/30 밤에 출발해 1/4 04:30에 인천에 도착합니다. 4성급 숙소를 잡아도 2명 3박 약 138만 원이에요.</p>
+  </div>
+
+  <div class="cards">
+    <article class="card best">
+      <div class="head"><h2>하노이</h2><span class="chip ok">추천</span></div>
+      <dl class="kv">
+        <dt>가는 편</dt><dd class="num">12/31(목) 00:15 → 03:35<br><span class="note">선푸꾸옥항공, 12/30 밤 공항</span></dd>
+        <dt>오는 편</dt><dd class="num">1/3(일) 22:20 → <b>1/4 04:30</b> 인천</dd>
+        <dt>항공</dt><dd class="num">1인 왕복 48.9만</dd>
+        <dt>숙소</dt><dd>룩세덴 호텔 <span class="num">6.8만/박</span><br><span class="note">4성 · 평점 4.8(후기 2.8천) · 조식</span></dd>
+        <dt>날씨</dt><dd>낮 15~20℃, 아침저녁 쌀쌀</dd>
+      </dl>
+      <p class="total num">약 138만 <span class="note">2명 3박 · 4박이면 152만</span></p>
+    </article>
+
+    <article class="card">
+      <div class="head"><h2>다낭</h2><span class="chip">해변</span></div>
+      <dl class="kv">
+        <dt>가는 편</dt><dd class="num">12/30(수) 23:50 → 02:55<br><span class="note">비엣젯</span></dd>
+        <dt>오는 편</dt><dd class="num">1/3(일) 21:45 → <b>1/4 04:25</b> 인천<br><span class="note">진에어 · 항공사 다른 표 2장</span></dd>
+        <dt>항공</dt><dd class="num">1인 왕복 52.0만</dd>
+        <dt>숙소</dt><dd>Canvas Danang Beach <span class="num">9.2만/박</span><br><span class="note">4성 · 4.8(4.1천) · 조식 · 미케비치</span></dd>
+        <dt>날씨</dt><dd>낮 20℃ 안팎, 비 올 수 있음</dd>
+      </dl>
+      <p class="total num">약 159만 <span class="note">2명 3박 · 4박 178만</span></p>
+    </article>
+
+    <article class="card">
+      <div class="head"><h2>호치민</h2><span class="chip no">1/3 귀국</span></div>
+      <dl class="kv">
+        <dt>가는 편</dt><dd class="num">12/30(수) 21:15 → 00:45<br><span class="note">비엣젯</span></dd>
+        <dt>오는 편</dt><dd class="num">1/3(일) 12:05 → <b>1/3 19:25</b> 인천</dd>
+        <dt>항공</dt><dd class="num">1인 왕복 55.8만</dd>
+        <dt>숙소</dt><dd>Cochin Zen <span class="num">13.5만/박</span><br><span class="note">4성 · 4.2(1.4천) · 조식 · 벤탄시장 270m</span></dd>
+        <dt>날씨</dt><dd>낮 30℃ 안팎, 건기</dd>
+      </dl>
+      <p class="total num">약 192만 <span class="note">2명 3박 · 4박 219만</span></p>
+    </article>
+  </div>
+  <p class="note" style="margin-top:12px">세 곳 모두 현지에 새벽 1~3시에 도착합니다. 도착하자마자 쉬려면 12/30 밤부터 4박을 잡으세요. 3박이면 12/31 오후 체크인까지 기다려야 합니다. 호치민은 1/4 새벽 5시 전에 인천에 닿는 편이 없어 1/3 낮에 돌아오는 일정입니다.</p>
+</section>
+
+<section id="airline">
+  <p class="eyebrow">질문</p>
+  <h2>베트남항공이나 대한항공으로 하면?</h2>
+  <p class="lede">위 최저가는 모두 저비용 항공사(선푸꾸옥항공·비엣젯·진에어)입니다. 대형 항공사 중 1/4 새벽 5시 전에 인천에 닿는 건 <b>대한항공 하노이편</b> 하나뿐이에요.</p>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>하노이 왕복</th><th>가는 편</th><th>오는 편 (인천 도착)</th><th>5시 전</th><th class="r">1인 왕복</th></tr></thead>
+      <tbody>
+        <tr><td>선푸꾸옥항공</td><td class="num">12/31 00:15</td><td class="num">1/3 22:20 → 1/4 04:30</td><td><span class="chip ok">가능</span></td><td class="r">48.9만</td></tr>
+        <tr><td>대한항공 <span class="note">(베트남항공 공동운항)</span></td><td class="num">12/31 08:00 → 11:10</td><td class="num">1/3 23:05 → 1/4 04:55</td><td><span class="chip ok">가능</span></td><td class="r">96.6만</td></tr>
+        <tr><td>아시아나</td><td class="num">12/31</td><td class="num">1/3 23:50 → 1/4 05:45</td><td><span class="chip no">불가</span></td><td class="r">98.1만</td></tr>
+        <tr><td>베트남항공</td><td class="num">12/31</td><td class="num">1/3 23:35 → 1/4 05:30</td><td><span class="chip no">불가</span></td><td class="r">125.0만</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="note" style="margin-top:8px">다낭은 베트남항공 05:45·대한항공 05:20 도착, 호치민은 베트남항공 06:30·대한항공 07:05 도착이라 모두 5시를 넘습니다.</p>
+  <div class="info">
+    <div class="block">
+      <h3>마일리지</h3>
+      <ul>
+        <li><b>베트남항공</b>은 대한항공과 같은 스카이팀이라 대한항공 스카이패스에 적립할 수 있습니다. 예약 등급에 따라 적립률이 다르고, 가장 싼 운임은 적거나 없을 수 있어요.</li>
+        <li><b>아시아나</b>는 2026년 12월 17일 대한항공과 통합 예정입니다(스타얼라이언스는 12/16 탈퇴). 아시아나 탑승 마일은 1대1, 카드 등 제휴 마일은 1대0.82로 대한항공 마일로 바뀝니다(공정위 9/15 승인, 보도 기준).</li>
+        <li>인천–하노이는 편도 약 1,700마일이라 왕복 적립은 몇천 마일 수준입니다.</li>
+      </ul>
+    </div>
+    <div class="block">
+      <h3>대한항공으로 하면</h3>
+      <ul>
+        <li>1인 +47.7만 원, 2명 +95만 원입니다.</li>
+        <li>12/31 아침 8시 출발이라 새벽 도착이 없고 숙소 3박이면 됩니다. 2명 합계 약 234만 원으로, 저비용 4박(152만)보다 약 82만 원 더 듭니다.</li>
+        <li>맡기는 짐과 기내식이 포함되고 출발 시간이 편합니다. 마일리지만 보고 고를 정도의 차이는 아닙니다.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="hanoi">
+  <div class="city-head">
+    <p class="eyebrow">HAN · 노이바이 공항</p>
+    <h2>하노이 일정</h2>
+    <div class="chips"><span class="chip">낮 15~20℃ · 겉옷 필요</span><span class="chip">새해: 호안끼엠 호수 불꽃놀이</span><span class="chip">공항→구시가지 그랩 약 40분</span></div>
+  </div>
+  <div class="days">
+    <div class="day"><p class="d">12/30<small>수 · 밤</small></p><ul><li>21:45쯤 인천공항 도착, 체크인</li></ul></div>
+    <div class="day"><p class="d">12/31<small>목</small></p><ul>
+      <li><span class="fly">00:15 선푸꾸옥항공 출발 → 03:35 하노이 도착</span>, 그랩으로 호텔(12/30 박 잡으면 바로 체크인)</li>
+      <li>오후: 구시가지 36거리 → 호안끼엠 호수·응옥선 사당 → 성 요셉 성당</li>
+      <li>저녁: 분짜 흐엉리엔 또는 퍼 10 리꾸옥수</li>
+      <li>밤: 호안끼엠 호수 카운트다운·불꽃놀이. 자정 넘으면 그랩이 3~5배 비싸지고 잘 안 잡히니 걸어서 돌아올 수 있는 구시가지 숙소가 편합니다.</li></ul></div>
+    <div class="day"><p class="d">1/1<small>금 · 공휴일</small></p><ul>
+      <li>문묘(Văn Miếu) → 점심 분보남보 → 호아로 수용소(약 1시간)</li>
+      <li>카페장 에그커피 → 저녁 마사지</li>
+      <li class="note">호찌민 묘소는 금요일 휴무로 알려져 있어 1/3로 옮겼습니다.</li></ul></div>
+    <div class="day"><p class="d">1/2<small>토</small></p><ul>
+      <li>근교 당일 투어 하나: <b>닌빈</b>(짱안 보트·항무아) 또는 <b>하롱베이</b>. 보통 아침 7~8시 호텔 픽업, 저녁 7~8시 복귀</li></ul></div>
+    <div class="day"><p class="d">1/3<small>일</small></p><ul>
+      <li>체크아웃, 짐은 호텔에 맡기기</li>
+      <li>오전 호찌민 묘소·바딘 광장(오전만 개방) → 서호·쩐꾸옥 사원 → 기찻길 카페(출입이 막힐 때가 있음)</li>
+      <li>저녁: 마사지 + 샤워 → 19:30쯤 그랩으로 공항</li>
+      <li><span class="fly">22:20 출발 → 1/4(월) 04:30 인천 도착</span></li></ul></div>
+  </div>
+  <div class="info">
+    <div class="block"><h3>맛집</h3><ul>
+      <li><b>분짜 흐엉리엔</b>: 오바마 분짜로 유명한 곳</li>
+      <li><b>분짜 닥킴</b>: 1966년 개업, 미쉐린 가이드 선정. 1인 1세트 주문을 요구하고 응대 평이 엇갈림</li>
+      <li><b>퍼 10 리꾸옥수</b>: 성 요셉 성당 근처 소고기 쌀국수, 미쉐린 빕구르망. 합석 기본, 현금 준비</li>
+      <li><b>퍼 자쭈옌</b>: 하노이 3대 쌀국수로 꼽히는 곳</li>
+      <li><b>분보남보 바익프엉</b>: 국물 없는 비빔 쌀국수, 7.5만~10만 동, 현금만</li>
+      <li><b>카페장</b>: 에그커피 원조로 알려진 카페</li></ul></div>
+    <div class="block"><h3>마사지</h3><ul>
+      <li><b>센 스파</b>: 호안끼엠 호수 옆, 매일 10~22시, 카카오톡 예약, 한국어 가능한 직원 있다는 후기</li>
+      <li><b>라 메종 스파</b>: 호안끼엠, 10~22시(마지막 예약 21시)</li>
+      <li><b>야쿠시 센터</b>: 서호 쪽, 팁 없는 가성비 로컬 마사지로 평이 좋음</li>
+      <li><b>Ve'hanoi</b>: 구시가지 고급 스파, 90분 패키지 187.5만 동(약 10만 원)</li>
+      <li class="note">마지막 날은 짐 보관·샤워 되는 곳으로 예약하세요.</li></ul></div>
+    <div class="block"><h3>이동·택시</h3><ul>
+      <li><b>공항↔구시가지</b>: 그랩 약 40분, 25~35만 동(약 1.5~2만 원). 공항 이동은 앱에 요금이 미리 정해져 나옴</li>
+      <li><b>86번 공항버스</b>: 약 50분, 4.5~5만 동, 현금. 2명이면 그랩이 편함</li>
+      <li>시내는 그랩(차·오토바이)이나 택시 앱 이용. 구시가지 안은 걸어서 다닐 만함</li></ul></div>
+  </div>
+</section>
+
+<section id="danang">
+  <div class="city-head">
+    <p class="eyebrow">DAD · 다낭 공항</p>
+    <h2>다낭 일정</h2>
+    <div class="chips"><span class="chip">낮 20℃ 안팎 · 비 대비</span><span class="chip">새해: 한강변 박당 거리</span><span class="chip">공항→한시장 그랩 약 15분</span></div>
+  </div>
+  <div class="days">
+    <div class="day"><p class="d">12/30<small>수 · 밤</small></p><ul><li>21:20쯤 인천공항 도착 → <span class="fly">23:50 비엣젯 출발</span></li></ul></div>
+    <div class="day"><p class="d">12/31<small>목</small></p><ul>
+      <li><span class="fly">02:55 다낭 도착</span> → 그랩으로 미케비치 호텔</li>
+      <li>오후: 미케비치 산책 → 핑크성당(다낭 대성당) → 한시장</li>
+      <li>저녁: 해산물(남단·베만, 수조에서 고르고 kg 단위 계산)</li>
+      <li>밤: 한강변 박당 거리·쩐흥다오 거리 카운트다운. 19시쯤부터 도로가 통제됩니다.</li></ul></div>
+    <div class="day"><p class="d">1/1<small>금 · 공휴일</small></p><ul>
+      <li>오행산(엘리베이터로 오르기) → 점심 안방비치</li>
+      <li>오후~밤 호이안 올드타운: 소원배, 바구니배, 야경 → 그랩으로 다낭 복귀(약 45분)</li></ul></div>
+    <div class="day"><p class="d">1/2<small>토</small></p><ul>
+      <li>바나힐: 오전 9시 전 도착. 골든브릿지 직행 '호이안 역' 케이블카를 먼저 타면 대기가 줄어듦</li>
+      <li>오후 마사지 → 21시 용다리 불·물 쇼(주말 밤 진행, 현지 확인)</li></ul></div>
+    <div class="day"><p class="d">1/3<small>일</small></p><ul>
+      <li>점심 미꽝·반쎄오 → 한시장·롯데마트 기념품</li>
+      <li>마사지 + 샤워 → 19:30쯤 공항</li>
+      <li><span class="fly">21:45 진에어 출발 → 1/4(월) 04:25 인천 도착</span></li></ul></div>
+  </div>
+  <div class="info">
+    <div class="block"><h3>맛집</h3><ul>
+      <li><b>미꽝 홍반</b>: 미쉐린 빕구르망 2024·2025 연속. 가게가 좁음</li>
+      <li><b>미꽝 1A</b>: 가장 유명한 미꽝집, 맛은 호불호</li>
+      <li><b>벱꾸온(Bếp Cuốn)</b>: 바삭한 반쎄오, 미쉐린 셀렉티드 2025~2026</li>
+      <li><b>반쎄오 바즈엉</b>: 가이드북 단골 반쎄오집</li>
+      <li><b>해산물 남단·베만</b>: 손짜 쪽 골목 가성비 해산물. 레몬그라스 조개, 타마린드 게</li>
+      <li><b>분짜까 바헌</b>: 어묵 국수</li></ul></div>
+    <div class="block"><h3>마사지</h3><ul>
+      <li><b>허벌 스파</b>: 구글 평점 4.9(후기 7천+), 3개 지점. 대나무 마사지 90분 약 3만 원대</li>
+      <li><b>다한 스파</b>: 한국어 매니저, 2인 예약 시 픽업. 60분 약 3만 원대</li>
+      <li><b>뷰 스파</b>: 한시장 근처, 아로마 60분 2만 원대</li>
+      <li class="note">로컬 스파 90분 1~2만 원대, 한인 제휴 고급 스파 3~5만 원대(블로그 기준)</li></ul></div>
+    <div class="block"><h3>이동·택시</h3><ul>
+      <li><b>공항↔한시장</b>: 약 3.5km, 15분, 그랩 8~10만 동(약 5천 원). 공항 시내버스는 없음</li>
+      <li><b>미케비치</b>: 공항에서 차로 15~20분, 그랩 앱으로 요금 확인</li>
+      <li><b>호이안</b>: 그랩 약 45분. 바나힐은 투어 차량이나 그랩 왕복 예약이 편함</li></ul></div>
+  </div>
+</section>
+
+<section id="hcmc">
+  <div class="city-head">
+    <p class="eyebrow">SGN · 떤선녓 공항</p>
+    <h2>호치민 일정</h2>
+    <div class="chips"><span class="chip">낮 30℃ 안팎 · 반팔</span><span class="chip">새해: 응우옌후에 보행자 거리</span><span class="chip">공항→1군 그랩 20~30분</span></div>
+  </div>
+  <div class="days">
+    <div class="day"><p class="d">12/30<small>수 · 저녁</small></p><ul><li>18:45쯤 인천공항 도착 → <span class="fly">21:15 비엣젯 출발</span></li></ul></div>
+    <div class="day"><p class="d">12/31<small>목</small></p><ul>
+      <li><span class="fly">00:45 호치민 도착</span> → 그랩으로 1군 호텔</li>
+      <li>오후: 중앙우체국 → 노트르담 성당(보수 공사 여부 확인) → 인민위원회 청사 → 응우옌후에 거리</li>
+      <li>저녁: 꽌넴 또는 퍼 호아</li>
+      <li>밤: 응우옌후에 보행자 거리·사이공강변 카운트다운과 불꽃놀이. 베트남에서 연말 행사가 가장 큰 도시입니다.</li></ul></div>
+    <div class="day"><p class="d">1/1<small>금 · 공휴일</small></p><ul>
+      <li>통일궁 → 전쟁박물관(공휴일 운영 확인) → 반미 후인호아</li>
+      <li>벤탄시장 → 마사지 → 저녁 부이비엔 거리(밤에 시끄럽고 소매치기 주의)</li></ul></div>
+    <div class="day"><p class="d">1/2<small>토</small></p><ul>
+      <li>근교는 하나만: <b>구찌터널</b> 반나절 또는 <b>메콩델타</b> 당일. 둘 다 하면 하루를 거의 차에서 보냄</li></ul></div>
+    <div class="day"><p class="d">1/3<small>일</small></p><ul>
+      <li>아침 껌땀(돼지갈비 덮밥) → 09:30쯤 체크아웃, 그랩으로 공항</li>
+      <li><span class="fly">12:05 비엣젯 출발 → 1/3(일) 19:25 인천 도착</span></li></ul></div>
+  </div>
+  <div class="info">
+    <div class="block"><h3>맛집</h3><ul>
+      <li><b>반미 후인호아</b>: 1군 반미 전문점, 빵과 속이 큼직함</li>
+      <li><b>꽌넴(Quán Nem)</b>: 분짜와 게살 넴. 주문 후 튀겨서 20~30분 걸림, 10~22시</li>
+      <li><b>퍼 호아 파스퇴르</b>: 오래된 쌀국수집으로 유명</li>
+      <li><b>껌땀</b>: 숯불 돼지갈비 덮밥, 아침 식사로 좋음</li></ul></div>
+    <div class="block"><h3>마사지</h3><ul>
+      <li><b>미도 럭셔리 스파</b>: 1군, 핫스톤·아로마가 인기</li>
+      <li><b>골든 로터스 스파</b>: 1군, 사우나 겸용</li>
+      <li><b>22 스파</b>: 가성비, 공항 픽업. 손님이 많아 예약 권장</li>
+      <li><b>스완 스파</b>: 1군, 짐 보관·샤워·공항 픽업 포함 패키지 약 2.9만 원</li></ul></div>
+    <div class="block"><h3>이동·택시</h3><ul>
+      <li><b>공항↔1군</b>: 그랩 10~14만 동(약 6~8천 원), 앱에 뜬 금액 그대로 결제</li>
+      <li><b>109번 버스</b>: 1.5~2만 동, 현금, 배차 약 40분</li>
+      <li>1군 안은 걸어서 다닐 만함. 구찌·메콩은 투어 상품이 편함</li></ul></div>
+  </div>
+</section>
+
+<section id="tips">
+  <p class="eyebrow">공통</p>
+  <h2>출발 전에 챙길 것</h2>
+  <div class="info">
+    <div class="block"><h3>돈</h3><ul>
+      <li>환율은 1만 동에 약 520~570원(9~11월 자료 기준). 출발 전 다시 확인하세요.</li>
+      <li>로컬 식당과 버스는 현금이나 QR만 받는 곳이 많습니다. 소액 현금을 준비하세요.</li>
+      <li>저비용 항공사는 맡기는 짐이 따로 유료입니다. 예약할 때 같이 추가하세요.</li></ul></div>
+    <div class="block"><h3>교통</h3><ul>
+      <li>그랩 앱을 설치하고 카드를 미리 등록하세요. 공항에서 바로 부를 수 있습니다.</li>
+      <li>12/31 자정 이후에는 그랩 요금이 3~5배로 오르고 취소가 잦습니다. 카운트다운 장소에서 걸어갈 수 있는 숙소가 좋습니다.</li></ul></div>
+    <div class="block"><h3>입국·날씨</h3><ul>
+      <li>한국인은 45일 무비자로 알려져 있습니다. 여권 남은 기간과 함께 출발 전 확인하세요.</li>
+      <li>하노이는 쌀쌀해서 얇은 니트와 바람막이가 필요합니다. 다낭은 긴팔 한 벌, 호치민은 반팔이면 됩니다.</li>
+      <li>새해 행사 장소와 시간은 매년 12월 중순 각 시가 발표합니다.</li></ul></div>
+  </div>
+</section>
+
+<section id="sources" style="border-bottom:0">
+  <h2>출처</h2>
+  <ul class="sources">
+    <li><a href="https://www.google.com/travel/flights?q=Flights%20to%20HAN%20from%20ICN%20on%202026-12-31%20through%202027-01-03&curr=KRW&hl=ko&gl=KR">Google 항공편 – 하노이</a></li>
+    <li><a href="https://www.google.com/travel/flights?q=Flights%20to%20DAD%20from%20ICN%20on%202026-12-30%20through%202027-01-03&curr=KRW&hl=ko&gl=KR">Google 항공편 – 다낭</a></li>
+    <li><a href="https://www.google.com/travel/flights?q=Flights%20to%20SGN%20from%20ICN%20on%202026-12-30%20through%202027-01-03&curr=KRW&hl=ko&gl=KR">Google 항공편 – 호치민</a></li>
+    <li><a href="https://vietnamguide.co.kr/place/%ED%95%98%EB%85%B8%EC%9D%B4-pho-10-ly-quoc-su/">베트남가이드 – 퍼 10 리꾸옥수</a></li>
+    <li><a href="https://vietnamguide.co.kr/place/%ED%95%98%EB%85%B8%EC%9D%B4-bun-cha-dac-kim/">베트남가이드 – 분짜 닥킴</a></li>
+    <li><a href="https://www.trvlogue.com/ko/hanoi-sen-spa-massage-review">하노이 센 스파 후기</a></li>
+    <li><a href="https://www.trvlogue.com/ko/hanoi-yakushi-massage-review">하노이 야쿠시 센터 후기</a></li>
+    <li><a href="https://vietnamguide.co.kr/%ED%95%98%EB%85%B8%EC%9D%B4-%EA%B3%B5%ED%95%AD%EC%97%90%EC%84%9C-%EC%8B%9C%EB%82%B4-%EA%B0%80%EB%8A%94%EB%B0%A9%EB%B2%95-%ED%83%9D%EC%8B%9C-%EB%B2%84%EC%8A%A4/">하노이 공항에서 시내 가는 법</a></li>
+    <li><a href="https://vietnam.travel/kr/things-to-do/foodie-guide-da-nang">베트남관광청 – 다낭 미식 가이드</a></li>
+    <li><a href="https://vietnamguide.co.kr/place/다낭-mi-quang-hong-van/">베트남가이드 – 미꽝 홍반</a></li>
+    <li><a href="https://vietnamguide.co.kr/place/다낭-허벌-스파/">베트남가이드 – 다낭 허벌 스파</a></li>
+    <li><a href="https://www.waug.com/magazines/648">와그 – 다낭 스파</a></li>
+    <li><a href="https://vietnamguide.co.kr/%EB%8B%A4%EB%82%AD-%EA%B3%B5%ED%95%AD%EC%97%90%EC%84%9C-%EC%8B%9C%EB%82%B4/">다낭 공항에서 시내</a></li>
+    <li><a href="https://vietnamguide.co.kr/city/hochiminh/course/">베트남가이드 – 호치민 코스</a></li>
+    <li><a href="https://vietnamguide.co.kr/place/호치민-quan-nem-restaurant/">베트남가이드 – 꽌넴</a></li>
+    <li><a href="https://vietnamguide.co.kr/place/호치민-banh-mi-huynh-hoa-le-thi-rieng/">베트남가이드 – 반미 후인호아</a></li>
+    <li><a href="https://vinpearl.com/ko/%ED%98%B8%EC%B9%98%EB%AF%BC%EC%8B%9C-%EB%A7%88%EC%82%AC%EC%A7%80-ho-chi-minh">빈펄 – 호치민 마사지</a></li>
+    <li><a href="https://vietnamguide.co.kr/%ED%98%B8%EC%B9%98%EB%AF%BC-%EA%B3%B5%ED%95%AD%EC%97%90%EC%84%9C-%EC%8B%9C%EB%82%B4-%EB%B0%A9%EB%AC%B8-%EB%B0%A9%EB%B2%95-%EC%B4%9D%EC%A0%95%EB%A6%AC/">호치민 공항에서 시내 가는 법</a></li>
+    <li><a href="https://www.vietnamtourism.com/ko/new-year-s-eve-in-vietnam-countdown-spots-in-hanoi-saigon-an">베트남 새해 카운트다운 장소</a></li>
+    <li><a href="https://news.mtn.co.kr/news-detail/2026091516144572224">MTN – 대한항공·아시아나 마일리지 통합</a></li>
+    <li><a href="https://sports.khan.co.kr/article/202605131729003">스포츠경향 – 통합 대한항공 12월 17일</a></li>
+    <li><a href="https://www.koreanair.com/us/en/skypass/earn-miles/partner-airlines/skyteam">대한항공 – 스카이팀 마일 적립</a></li>
+  </ul>
+</section>
+</main>
+
+<footer class="wrap">가격은 2026년 11월 18일 조회값이며 성인 1명 왕복, 세금 포함입니다. 연말 성수기라 빠르게 오를 수 있습니다. 맛집·마사지 정보는 블로그와 여행 사이트 기준이라 영업시간과 가격이 바뀌었을 수 있습니다.</footer>
+</body>
+</html>
