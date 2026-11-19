@@ -37,6 +37,18 @@
     body.scope #eyepiece { display: block; }
     body.scope #labelLayer { display: block; }
     body.scope #zoomBox { display: flex; }
+    #bubbles { position: fixed; inset: 0; overflow: hidden; pointer-events: none; }
+    .bubble { position: absolute; left: 0; top: 0; display: none; transform: translate(-50%, -100%); width: max-content; max-width: min(60vw, 240px); padding: 6px 10px; font: 13px/1.4 sans-serif; color: #141828; background: rgba(255, 255, 255, 0.93); border: 2px solid; border-radius: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .bubble::after { content: ''; position: absolute; left: 50%; bottom: -8px; margin-left: -6px; border: 6px solid transparent; border-bottom: 0; border-top-color: inherit; }
+    #chatBtn { position: fixed; left: 12px; bottom: 82px; width: 46px; height: 46px; border-radius: 23px; font: 20px sans-serif; background: rgba(30, 36, 80, 0.85); border: 1px solid #7f8fe0; cursor: pointer; }
+    #chatForm { position: fixed; left: 50%; bottom: 150px; transform: translateX(-50%); display: none; align-items: center; gap: 6px; width: min(calc(100% - 32px), 440px); box-sizing: border-box; padding: 6px; background: rgba(10, 14, 40, 0.92); border: 1px solid #7f8fe0; border-radius: 22px; }
+    #chatForm.open { display: flex; }
+    #chatInput { flex: 1; min-width: 0; padding: 8px 10px; font: 16px sans-serif; color: #fff; background: transparent; border: 0; outline: none; }
+    #chatLeft { font: 12px sans-serif; color: #9aa6d8; }
+    #chatForm button { padding: 8px 14px; font: 14px sans-serif; color: #2a1d05; background: #ffcc44; border: 0; border-radius: 16px; cursor: pointer; }
+    #chatLog { position: fixed; left: 12px; bottom: 204px; display: flex; flex-direction: column; align-items: flex-start; gap: 3px; max-width: min(calc(100% - 24px), 320px); font: 12px/1.35 sans-serif; color: #e8ecff; pointer-events: none; }
+    .chatLine { padding: 3px 8px; background: rgba(10, 14, 40, 0.65); border-radius: 10px; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; transition: opacity 1s; }
+    .chatDot { margin-right: 4px; }
   </style>
 </head>
 <body>
@@ -60,6 +72,14 @@
   <button id="missionBtn" type="button">별자리 찾기</button>
   <button id="turnLeft" class="turnBtn" type="button" aria-label="화면 왼쪽으로 돌리기">↺</button>
   <button id="turnRight" class="turnBtn" type="button" aria-label="화면 오른쪽으로 돌리기">↻</button>
+  <div id="bubbles"></div>
+  <div id="chatLog"></div>
+  <form id="chatForm" autocomplete="off">
+    <input id="chatInput" type="text" maxlength="200" placeholder="별 이야기를 해 보세요" enterkeyhint="send" aria-label="말풍선에 쓸 말">
+    <span id="chatLeft">200</span>
+    <button type="submit">보내기</button>
+  </form>
+  <button id="chatBtn" type="button" aria-label="말하기">💬</button>
   <div id="zoomBox">
     <button id="zoomIn" type="button" aria-label="확대">+</button>
     <span id="zoomLabel">×2</span>
@@ -471,6 +491,7 @@
     let keyYaw = 0;       // 방향키를 처음 누른 순간의 카메라 방향(그 동안은 이 방향 기준으로 걷는다)
 
     addEventListener('keydown', (e) => {
+      if (e.target instanceof HTMLInputElement) return;   // 말풍선 글을 쓰는 동안은 걷지 않는다
       if (!MOVE_KEYS.includes(e.code)) return;
       keys[e.code] = true;
       target = null;
@@ -589,7 +610,7 @@
     document.getElementById('turnLeft').addEventListener('click', () => turnCamera(1));
     document.getElementById('turnRight').addEventListener('click', () => turnCamera(-1));
     addEventListener('keydown', (e) => {
-      if (scopeOn || e.repeat) return;
+      if (scopeOn || e.repeat || e.target instanceof HTMLInputElement) return;
       if (e.code === 'KeyQ') turnCamera(1);
       if (e.code === 'KeyE') turnCamera(-1);
     });
@@ -1587,6 +1608,7 @@
     const spawnPos = me.position.clone();
     let sendPos = null;
     let sendLink = null;
+    let sendChatText = null;
     let sparkleStart = -1;
     let toastUntil = 0;
 
@@ -1636,7 +1658,7 @@
       const marker = new THREE.Sprite(new THREE.SpriteMaterial({ map: ringTex, color, transparent: true, depthTest: false, fog: false }));
       marker.visible = false;
       scene.add(marker);
-      const p = { doll, marker, color, tx: 0, tz: 0, ry: 0, seen: false, scope: false, az: 0, alt: 0, diam: SCOPE_FOVS[0] };
+      const p = { doll, marker, color, tx: 0, tz: 0, ry: 0, seen: false, scope: false, az: 0, alt: 0, diam: SCOPE_FOVS[0], lastChat: -99 };
       peers.set(id, p);
       showPeople();
       return p;
@@ -1647,6 +1669,7 @@
       scene.remove(p.doll);
       scene.remove(p.marker);
       p.marker.material.dispose();
+      removeBubble(id);
       peers.delete(id);
       showPeople();
     }
@@ -1677,8 +1700,10 @@
         const room = joinRoom({ appId: APP_ID }, ROOM);
         const [sp, getPos] = room.makeAction('pos');
         const [sl, getLink] = room.makeAction('link');
+        const [sc, getChat] = room.makeAction('chat');
         sendPos = sp;
         sendLink = sl;
+        sendChatText = sc;
         room.onPeerJoin((id) => {
           addPeer(id);
           sendMyState();
@@ -1710,6 +1735,7 @@
           sparkleStart = nowT;
           showToast('함께 있는 사람이 별자리를 만들었어요');
         });
+        getChat((d, id) => receiveChat(d, id));
         setInterval(sendMyState, SEND_EVERY);
       } catch (e) {
         console.warn('함께 있기를 켜지 못했습니다. 혼자 보는 화면으로 계속합니다.', e);
@@ -1756,6 +1782,156 @@
         toastEl.style.display = 'none';
       }
     }
+    // ---------- 말풍선 대화 ----------
+    // 이름 없이 인형 색으로만 누구인지 알고, 글은 그 순간 같은 방에 있는 사람에게만 가며 어디에도 남지 않는다
+    const CHAT_MAX = 200;        // 한 번에 보낼 수 있는 글자 수
+    const CHAT_GAP = 2;          // 다시 말할 수 있는 간격(초)
+    const CHAT_LOG_LINES = 5;    // 왼쪽 아래에 남겨 두는 최근 대화 줄 수
+    const CHAT_LOG_TIME = 30;    // 최근 대화 한 줄이 남아 있는 시간(초)
+    const BUBBLE_UP = 1.75;      // 인형 발에서 말풍선 꼬리까지의 높이
+    const MY_CSS_COLOR = '#e8643c';
+    const bubblesEl = document.getElementById('bubbles');
+    const chatLogEl = document.getElementById('chatLog');
+    const chatForm = document.getElementById('chatForm');
+    const chatInput = document.getElementById('chatInput');
+    const chatLeft = document.getElementById('chatLeft');
+    const bubbles = new Map();   // 'me' 또는 상대 id → { el, until }
+    const bubbleAt = new THREE.Vector3();
+    let lastSentChat = -99;
+
+    function toCssColor(hex) {
+      return '#' + hex.toString(16).padStart(6, '0');
+    }
+    // 받은 글은 글자로만 다루고(코드로 읽지 않음) 줄바꿈 같은 제어 문자를 빼고 200자에서 자른다
+    function cleanChatText(text) {
+      if (typeof text !== 'string') return '';
+      return text.replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, CHAT_MAX);
+    }
+    // 긴 글일수록 오래(6초~20초) 떠 있는다
+    function showBubble(id, text, color) {
+      let b = bubbles.get(id);
+      if (!b) {
+        const el = document.createElement('div');
+        el.className = 'bubble';
+        bubblesEl.appendChild(el);
+        b = { el, until: 0 };
+        bubbles.set(id, b);
+      }
+      b.el.textContent = text;
+      b.el.style.borderColor = color;
+      b.until = nowT + Math.min(20, 6 + text.length * 0.07);
+    }
+    function removeBubble(id) {
+      const b = bubbles.get(id);
+      if (!b) return;
+      b.el.remove();
+      bubbles.delete(id);
+    }
+    function addChatLine(text, color) {
+      const line = document.createElement('div');
+      line.className = 'chatLine';
+      const dot = document.createElement('span');
+      dot.className = 'chatDot';
+      dot.textContent = '●';
+      dot.style.color = color;
+      line.append(dot, document.createTextNode(text));
+      chatLogEl.appendChild(line);
+      while (chatLogEl.children.length > CHAT_LOG_LINES) chatLogEl.firstChild.remove();
+      setTimeout(() => {
+        line.style.opacity = '0';
+        setTimeout(() => line.remove(), 1000);
+      }, CHAT_LOG_TIME * 1000);
+    }
+    function receiveChat(d, id) {
+      const text = cleanChatText(d);
+      if (!text) return;
+      const p = addPeer(id);
+      if (nowT - p.lastChat < CHAT_GAP / 2) return;   // 너무 잦게 오는 글은 버린다
+      p.lastChat = nowT;
+      const color = toCssColor(p.color);
+      showBubble(id, text, color);
+      addChatLine(text, color);
+    }
+    function sendChat(raw) {
+      const text = cleanChatText(raw);
+      if (!text) return false;
+      if (nowT - lastSentChat < CHAT_GAP) {
+        showToast('조금 뒤에 다시 말해 주세요');
+        return false;
+      }
+      lastSentChat = nowT;
+      if (sendChatText) sendChatText(text);
+      showBubble('me', text, MY_CSS_COLOR);
+      addChatLine(text, MY_CSS_COLOR);
+      return true;
+    }
+    function showChatLeft() {
+      chatLeft.textContent = CHAT_MAX - chatInput.value.length;
+    }
+    function openChat() {
+      chatForm.classList.add('open');
+      chatInput.focus();
+    }
+    function closeChat() {
+      chatForm.classList.remove('open');
+      chatInput.blur();
+    }
+    document.getElementById('chatBtn').addEventListener('click', () => (chatForm.classList.contains('open') ? closeChat() : openChat()));
+    chatForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      if (!chatInput.value.trim()) {
+        closeChat();   // 빈 칸에서 Enter를 치면 입력칸을 닫는다
+        return;
+      }
+      if (sendChat(chatInput.value)) {
+        chatInput.value = '';
+        showChatLeft();
+      }
+    });
+    chatInput.addEventListener('input', showChatLeft);
+    // 글을 쓰기 시작하면 누르고 있던 걷기 키를 뗀 것으로 본다
+    chatInput.addEventListener('focus', () => { for (const k of MOVE_KEYS) keys[k] = false; });
+    chatInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeChat();
+    });
+    addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' || e.target instanceof HTMLInputElement || e.target instanceof HTMLButtonElement) return;
+      e.preventDefault();
+      openChat();
+    });
+    // 말풍선을 놓을 화면 자리: 걷는 화면은 인형 머리 위, 망원경 화면은 그 사람이 보는 곳의 동그라미 위(나는 시야 가운데)
+    function findBubbleSpot(id) {
+      if (id === 'me') {
+        if (scopeOn) return { x: innerWidth / 2, y: innerHeight / 2 - 30 };
+        bubbleAt.copy(me.position);
+        bubbleAt.y += BUBBLE_UP;
+      } else {
+        const p = peers.get(id);
+        if (!p || !p.seen) return null;
+        if (scopeOn) {
+          if (!p.marker.visible) return null;
+          bubbleAt.copy(p.marker.position);
+        } else {
+          bubbleAt.copy(p.doll.position);
+          bubbleAt.y += BUBBLE_UP;
+        }
+      }
+      bubbleAt.project(camera);
+      if (bubbleAt.z > 1) return null;   // 카메라 뒤쪽
+      const y = (1 - bubbleAt.y) / 2 * innerHeight - (scopeOn ? 18 : 0);
+      return { x: (bubbleAt.x + 1) / 2 * innerWidth, y };
+    }
+    function updateBubbles() {
+      for (const [id, b] of bubbles) {
+        const spot = nowT < b.until ? findBubbleSpot(id) : null;
+        b.el.style.display = spot ? 'block' : 'none';
+        if (!spot) continue;
+        const half = b.el.offsetWidth / 2 + 4;   // 화면 가장자리에서 잘리지 않게 안쪽으로 당긴다
+        b.el.style.left = Math.max(half, Math.min(innerWidth - half, spot.x)).toFixed(1) + 'px';
+        b.el.style.top = spot.y.toFixed(1) + 'px';
+      }
+    }
+
     // 남이 별자리를 만들면 밝은 별들이 잠깐 커졌다 작아지며 반짝인다
     function updateSparkle(t) {
       if (sparkleStart < 0) return;
@@ -1886,6 +2062,7 @@
       updateStars(t);
       updateLinks(t);
       updatePeers(dt);
+      updateBubbles();
       updateSparkle(t);
       renderer.render(scene, camera);
       if (wantPhoto) {
